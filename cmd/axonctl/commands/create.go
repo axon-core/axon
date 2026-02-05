@@ -44,7 +44,7 @@ func NewCreateCmd() *cobra.Command {
 
 			// Generate task name if not provided
 			if taskName == "" {
-				taskName = fmt.Sprintf("task-%s", metav1.Now().Format("20060102-150405"))
+				taskName = fmt.Sprintf("task-%s", metav1.Now().Format("20060102150405"))
 			}
 
 			task := &axonv1alpha1.Task{

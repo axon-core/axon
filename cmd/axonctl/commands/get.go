@@ -43,7 +43,7 @@ func NewGetCmd() *cobra.Command {
 			}
 
 			if outputFormat == "yaml" || outputFormat == "json" {
-				// For YAML/JSON output, just print the spec/status
+				// For YAML/JSON output format
 				fmt.Printf("Name: %s\n", task.Name)
 				fmt.Printf("Namespace: %s\n", task.Namespace)
 				fmt.Printf("Type: %s\n", task.Spec.Type)

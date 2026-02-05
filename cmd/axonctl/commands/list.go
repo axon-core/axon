@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +62,7 @@ func NewListCmd() *cobra.Command {
 			}
 
 			for _, task := range taskList.Items {
-				age := metav1.Now().Sub(task.CreationTimestamp.Time).Round(1)
+				age := metav1.Now().Sub(task.CreationTimestamp.Time).Round(time.Second)
 				if allNamespaces {
 					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 						task.Namespace, task.Name, task.Spec.Type, task.Status.Phase, age)
