@@ -72,7 +72,7 @@ WHAT ?= cmd/...
 build: ## Build binaries (use WHAT=cmd/axon to build specific binary).
 	@for dir in $$(go list ./$(WHAT)); do \
 		bin_name=$$(basename $$dir); \
-		go build -o bin/$$bin_name $$dir; \
+		CGO_ENABLED=0 go build -o bin/$$bin_name $$dir; \
 	done
 
 .PHONY: run
