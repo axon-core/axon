@@ -54,7 +54,7 @@ var _ = Describe("CLI", func() {
 		}, 5*time.Minute, 10*time.Second).Should(Succeed())
 
 		By("verifying task status via CLI get (detail)")
-		output := axonOutput("get", cliTaskName)
+		output := axonOutput("get", "task", cliTaskName)
 		Expect(output).To(ContainSubstring("Succeeded"))
 
 		By("verifying task logs via CLI")
@@ -65,7 +65,7 @@ var _ = Describe("CLI", func() {
 		axon("delete", cliTaskName)
 
 		By("verifying task is no longer listed")
-		output = axonOutput("get")
+		output = axonOutput("get", "tasks")
 		Expect(output).NotTo(ContainSubstring(cliTaskName))
 	})
 
@@ -90,7 +90,7 @@ var _ = Describe("CLI", func() {
 		}, 5*time.Minute, 10*time.Second).Should(Succeed())
 
 		By("verifying task status via CLI get (detail)")
-		output := axonOutput("get", cliWorkspaceTaskName)
+		output := axonOutput("get", "task", cliWorkspaceTaskName)
 		Expect(output).To(ContainSubstring("Succeeded"))
 		Expect(output).To(ContainSubstring("Workspace Repo"))
 
@@ -102,8 +102,26 @@ var _ = Describe("CLI", func() {
 		axon("delete", cliWorkspaceTaskName)
 
 		By("verifying task is no longer listed")
-		output = axonOutput("get")
+		output = axonOutput("get", "tasks")
 		Expect(output).NotTo(ContainSubstring(cliWorkspaceTaskName))
+	})
+})
+
+var _ = Describe("get", func() {
+	It("should fail without a resource type", func() {
+		axonFail("get")
+	})
+
+	It("should succeed with 'tasks' alias", func() {
+		axonOutput("get", "tasks")
+	})
+
+	It("should succeed with 'task' subcommand", func() {
+		axonOutput("get", "task")
+	})
+
+	It("should fail for a nonexistent task", func() {
+		axonFail("get", "task", "nonexistent-task-name")
 	})
 })
 
@@ -130,4 +148,12 @@ func axonOutput(args ...string) string {
 	err := cmd.Run()
 	Expect(err).NotTo(HaveOccurred())
 	return strings.TrimSpace(out.String())
+}
+
+func axonFail(args ...string) {
+	cmd := exec.Command(axonBin(), args...)
+	cmd.Stdout = GinkgoWriter
+	cmd.Stderr = GinkgoWriter
+	err := cmd.Run()
+	Expect(err).To(HaveOccurred())
 }

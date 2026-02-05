@@ -13,9 +13,24 @@ import (
 
 func newGetCommand(cfg *ClientConfig) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get [name]",
-		Short: "List tasks or get details of a specific task",
-		Args:  cobra.MaximumNArgs(1),
+		Use:   "get",
+		Short: "Get resources",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("must specify a resource type; use `axon get task`")
+		},
+	}
+
+	cmd.AddCommand(newGetTaskCommand(cfg))
+
+	return cmd
+}
+
+func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
+	return &cobra.Command{
+		Use:     "task [name]",
+		Aliases: []string{"tasks"},
+		Short:   "List tasks or get details of a specific task",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, ns, err := cfg.NewClient()
 			if err != nil {
@@ -41,6 +56,4 @@ func newGetCommand(cfg *ClientConfig) *cobra.Command {
 			return nil
 		},
 	}
-
-	return cmd
 }
