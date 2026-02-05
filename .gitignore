@@ -30,3 +30,10 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build output
+bin/
+
+# Claude Code
+.claude/
+CLAUDE.local.md
