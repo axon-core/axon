@@ -57,6 +57,61 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	}
 }
 
+func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner) {
+	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tSOURCE\tPHASE\tDISCOVERED\tTASKS\tAGE")
+	for _, s := range spawners {
+		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
+		source := ""
+		if s.Spec.When.GitHubIssues != nil {
+			source = s.Spec.When.GitHubIssues.Owner + "/" + s.Spec.When.GitHubIssues.Repo
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
+			s.Name, source, s.Status.Phase,
+			s.Status.TotalDiscovered, s.Status.TotalTasksCreated, age)
+	}
+	tw.Flush()
+}
+
+func printTaskSpawnerDetail(w io.Writer, ts *axonv1alpha1.TaskSpawner) {
+	printField(w, "Name", ts.Name)
+	printField(w, "Namespace", ts.Namespace)
+	printField(w, "Phase", string(ts.Status.Phase))
+	if ts.Spec.When.GitHubIssues != nil {
+		gh := ts.Spec.When.GitHubIssues
+		printField(w, "Source", "GitHub Issues")
+		printField(w, "Repository", gh.Owner+"/"+gh.Repo)
+		if gh.State != "" {
+			printField(w, "State", gh.State)
+		}
+		if len(gh.Labels) > 0 {
+			printField(w, "Labels", fmt.Sprintf("%v", gh.Labels))
+		}
+	}
+	printField(w, "Task Type", ts.Spec.TaskTemplate.Type)
+	if ts.Spec.TaskTemplate.Model != "" {
+		printField(w, "Model", ts.Spec.TaskTemplate.Model)
+	}
+	if ts.Spec.TaskTemplate.Workspace != nil {
+		printField(w, "Workspace Repo", ts.Spec.TaskTemplate.Workspace.Repo)
+		if ts.Spec.TaskTemplate.Workspace.Ref != "" {
+			printField(w, "Workspace Ref", ts.Spec.TaskTemplate.Workspace.Ref)
+		}
+	}
+	printField(w, "Poll Interval", ts.Spec.PollInterval)
+	if ts.Status.DeploymentName != "" {
+		printField(w, "Deployment", ts.Status.DeploymentName)
+	}
+	printField(w, "Discovered", fmt.Sprintf("%d", ts.Status.TotalDiscovered))
+	printField(w, "Tasks Created", fmt.Sprintf("%d", ts.Status.TotalTasksCreated))
+	if ts.Status.LastDiscoveryTime != nil {
+		printField(w, "Last Discovery", ts.Status.LastDiscoveryTime.Time.Format(time.RFC3339))
+	}
+	if ts.Status.Message != "" {
+		printField(w, "Message", ts.Status.Message)
+	}
+}
+
 func printField(w io.Writer, label, value string) {
 	fmt.Fprintf(w, "%-20s%s\n", label+":", value)
 }

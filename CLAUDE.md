@@ -4,7 +4,8 @@
 - **Use Makefile targets** instead of discovering build/test commands yourself.
 - **Keep changes minimal.** Do not refactor, reorganize, or 'improve' code beyond what was explicitly requested.
 - **For CI/release workflows**, always use existing Makefile targets rather than reimplementing build logic in YAML.
-- **Better tests** Always try to add or improve tests(including integration, e2e) when modifying code.
+- **Better tests.** Always try to add or improve tests(including integration, e2e) when modifying code.
+- **Logging conventions.** Start log messages with capital letters and do not end with punctuation.
 
 ## Key Makefile Targets
 - `make verify` — run all verification checks (lint, fmt, vet, etc.)

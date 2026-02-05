@@ -45,11 +45,51 @@ rules:
       - tasks/finalizers
     verbs:
       - update
+  # TaskSpawners
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/finalizers
+    verbs:
+      - update
   # Jobs
   - apiGroups:
       - batch
     resources:
       - jobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Deployments
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
     verbs:
       - create
       - delete
@@ -67,6 +107,65 @@ rules:
       - get
       - list
       - watch
+  # Secrets (for token mounting)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  # ServiceAccounts (for spawner RBAC setup)
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+  # RoleBindings (for spawner RBAC setup)
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: axon-spawner-role
+rules:
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - axon.io
+    resources:
+      - tasks
+    verbs:
+      - create
+      - get
+      - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

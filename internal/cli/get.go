@@ -22,8 +22,42 @@ func newGetCommand(cfg *ClientConfig) *cobra.Command {
 	}
 
 	cmd.AddCommand(newGetTaskCommand(cfg))
+	cmd.AddCommand(newGetTaskSpawnerCommand(cfg))
 
 	return cmd
+}
+
+func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
+	return &cobra.Command{
+		Use:     "taskspawner [name]",
+		Aliases: []string{"taskspawners", "ts"},
+		Short:   "List task spawners or get details of a specific task spawner",
+		Args:    cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cl, ns, err := cfg.NewClient()
+			if err != nil {
+				return err
+			}
+
+			ctx := context.Background()
+
+			if len(args) == 1 {
+				ts := &axonv1alpha1.TaskSpawner{}
+				if err := cl.Get(ctx, client.ObjectKey{Name: args[0], Namespace: ns}, ts); err != nil {
+					return fmt.Errorf("getting task spawner: %w", err)
+				}
+				printTaskSpawnerDetail(os.Stdout, ts)
+				return nil
+			}
+
+			tsList := &axonv1alpha1.TaskSpawnerList{}
+			if err := cl.List(ctx, tsList, client.InNamespace(ns)); err != nil {
+				return fmt.Errorf("listing task spawners: %w", err)
+			}
+			printTaskSpawnerTable(os.Stdout, tsList.Items)
+			return nil
+		},
+	}
 }
 
 func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
