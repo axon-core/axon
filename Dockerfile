@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25 AS builder
 
 WORKDIR /workspace
 
@@ -11,14 +11,14 @@ RUN go mod download
 COPY . .
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager ./cmd/manager
+RUN make build WHAT=cmd/manager
 
 # Runtime stage
 FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /
 
-COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/bin/manager .
 
 USER 65532:65532
 
