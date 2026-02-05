@@ -63,18 +63,25 @@ go install github.com/gjkim42/axon/cmd/axon@latest
 
 ### Run Your First Task
 
-1. Create a Secret with your OAuth token:
+1. Initialize a config file:
 
 ```bash
-kubectl create secret generic claude-oauth \
-  --from-literal=CLAUDE_CODE_OAUTH_TOKEN=<your-oauth-token>
+axon init
+```
+
+Edit `~/.axon/config.yaml` with your token:
+
+```yaml
+oauthToken: <your-oauth-token>
 ```
 
 2. Run a task:
 
 ```bash
-axon run -p "Create a hello world program in Python" --credential-type oauth --secret claude-oauth -w
+axon run -p "Create a hello world program in Python" -w
 ```
+
+Axon auto-creates the Kubernetes secret from your token.
 
 3. Watch it go:
 
@@ -88,7 +95,7 @@ task-a1b2c        claude-code   Succeeded  42s
 Run against a git repo:
 
 ```bash
-axon run -p "Add unit tests" --credential-type oauth --secret claude-oauth \
+axon run -p "Add unit tests" \
   --workspace-repo https://github.com/your-org/repo.git --workspace-ref main -w
 ```
 
@@ -127,12 +134,13 @@ Add `spec.workspace` to clone a repo before the agent starts:
 <details>
 <summary>Using an API key instead of OAuth</summary>
 
-```bash
-kubectl create secret generic anthropic-api-key \
-  --from-literal=ANTHROPIC_API_KEY=<your-api-key>
+Set `apiKey` instead of `oauthToken` in `~/.axon/config.yaml`:
+
+```yaml
+apiKey: <your-api-key>
 ```
 
-Then pass `--secret anthropic-api-key` to `axon run` (api-key is the default credential type), or set `spec.credentials.type: api-key` in YAML.
+Or pass `--secret` to `axon run` with a pre-created secret (api-key is the default credential type), or set `spec.credentials.type: api-key` in YAML.
 
 </details>
 
@@ -144,7 +152,8 @@ Then pass `--secret anthropic-api-key` to `axon run` (api-key is the default cre
 | Scale Out | Run hundreds of agents in parallel — Kubernetes handles scheduling |
 | CI-Native | Trigger agents from any pipeline via `kubectl`, Helm, Argo, or your own tooling |
 | Git Workspace | Clone a repo into the agent's working directory via `spec.workspace` |
-| CLI | `axon run`, `axon get`, `axon logs`, `axon delete` — manage tasks without writing YAML |
+| Config File | Set token, model, namespace, and workspace in `~/.axon/config.yaml` — secrets are auto-created |
+| CLI | `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage tasks without writing YAML |
 | Full Lifecycle | `Pending` → `Running` → `Succeeded` / `Failed` |
 | Owner References | Delete a Task and its Job + Pod are automatically cleaned up |
 | Credential Management | API key and OAuth supported via Kubernetes Secrets |
@@ -187,17 +196,51 @@ Then pass `--secret anthropic-api-key` to `axon run` (api-key is the default cre
 | `status.completionTime` | When the Task completed |
 | `status.message` | Additional information about the current status |
 
+### Configuration
+
+Axon reads defaults from `~/.axon/config.yaml` (override with `--config`). CLI flags always take precedence over config file values.
+
+```yaml
+# ~/.axon/config.yaml
+oauthToken: <your-oauth-token>
+# or: apiKey: <your-api-key>
+model: claude-sonnet-4-5-20250929
+namespace: my-namespace
+workspace:
+  repo: https://github.com/org/repo.git
+  ref: main
+```
+
+| Field | Description |
+|-------|-------------|
+| `oauthToken` | OAuth token — Axon auto-creates the Kubernetes secret |
+| `apiKey` | API key — Axon auto-creates the Kubernetes secret |
+| `secret` | (Advanced) Provide your own pre-created Kubernetes secret |
+| `credentialType` | Credential type when using `secret` (`api-key` or `oauth`) |
+| `model` | Default model override |
+| `namespace` | Default Kubernetes namespace |
+| `workspace.repo` | Default git repository URL to clone |
+| `workspace.ref` | Default git reference to checkout |
+
+**Precedence:** `--secret` flag > `secret` in config > `oauthToken`/`apiKey` in config.
+
 ### CLI
 
 The `axon` CLI lets you manage tasks without writing YAML.
 
 ```bash
+# Initialize a config file
+axon init
+
 # Run a task and watch its status
-axon run -p "Refactor auth to use JWT" --credential-type oauth --secret claude-oauth -w
+axon run -p "Refactor auth to use JWT" -w
 
 # Run against a git repo
-axon run -p "Add unit tests" --credential-type oauth --secret claude-oauth \
+axon run -p "Add unit tests" \
   --workspace-repo https://github.com/your-org/repo.git --workspace-ref main -w
+
+# Override config file defaults with CLI flags
+axon run -p "Fix bug" --secret other-secret --credential-type api-key -w
 
 # List tasks
 axon get tasks

@@ -25,6 +25,7 @@ func init() {
 type ClientConfig struct {
 	Kubeconfig string
 	Namespace  string
+	Config     *Config
 }
 
 // NewClient creates a controller-runtime client and resolves the namespace.
