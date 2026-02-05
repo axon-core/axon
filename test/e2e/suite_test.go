@@ -10,7 +10,10 @@ import (
 
 const testModel = "haiku"
 
-var oauthToken string
+var (
+	oauthToken  string
+	githubToken string
+)
 
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -22,4 +25,5 @@ var _ = BeforeSuite(func() {
 	if oauthToken == "" {
 		Skip("CLAUDE_CODE_OAUTH_TOKEN not set, skipping e2e tests")
 	}
+	githubToken = os.Getenv("GITHUB_TOKEN")
 })

@@ -68,18 +68,22 @@ jobs:
         with:
           cluster_name: kind
 
-      - name: Build controller image
-        run: make image WHAT=cmd/axon-controller VERSION=e2e
+      - name: Build images
+        run: |
+          make image WHAT=cmd/axon-controller VERSION=e2e
+          make image WHAT=cmd/axon-spawner VERSION=e2e
 
       - name: Load images into kind
-        run: kind load docker-image gjkim42/axon-controller:e2e
+        run: |
+          kind load docker-image gjkim42/axon-controller:e2e
+          kind load docker-image gjkim42/axon-spawner:e2e
 
       - name: Deploy controller
         run: |
           kubectl apply -f install-crd.yaml
           kubectl apply -f install.yaml
           kubectl set image deployment/axon-controller-manager manager=gjkim42/axon-controller:e2e -n axon-system
-          kubectl patch deployment axon-controller-manager -n axon-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Never"}]}}}}'
+          kubectl patch deployment axon-controller-manager -n axon-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Never","args":["--leader-elect","--spawner-image=gjkim42/axon-spawner:e2e","--spawner-image-pull-policy=Never"]}]}}}}'
           kubectl wait --for=condition=available deployment/axon-controller-manager -n axon-system --timeout=120s
 
       - name: Build CLI
@@ -88,5 +92,6 @@ jobs:
       - name: E2E Test
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           AXON_BIN: ${{ github.workspace }}/bin/axon
         run: make test-e2e

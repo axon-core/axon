@@ -1,0 +1,218 @@
+package source
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+const (
+	defaultBaseURL = "https://api.github.com"
+
+	// maxPages limits the number of pages fetched from the GitHub API to prevent
+	// unbounded API calls for repositories with many issues.
+	maxPages = 10
+
+	// maxCommentBytes limits the total size of concatenated comments per issue.
+	maxCommentBytes = 64 * 1024
+)
+
+// GitHubSource discovers issues from a GitHub repository.
+type GitHubSource struct {
+	Owner   string
+	Repo    string
+	Labels  []string
+	State   string
+	Token   string
+	BaseURL string
+	Client  *http.Client
+}
+
+type githubIssue struct {
+	Number  int           `json:"number"`
+	Title   string        `json:"title"`
+	Body    string        `json:"body"`
+	HTMLURL string        `json:"html_url"`
+	Labels  []githubLabel `json:"labels"`
+}
+
+type githubLabel struct {
+	Name string `json:"name"`
+}
+
+type githubComment struct {
+	Body string `json:"body"`
+}
+
+func (s *GitHubSource) baseURL() string {
+	if s.BaseURL != "" {
+		return s.BaseURL
+	}
+	return defaultBaseURL
+}
+
+func (s *GitHubSource) httpClient() *http.Client {
+	if s.Client != nil {
+		return s.Client
+	}
+	return http.DefaultClient
+}
+
+// Discover fetches issues from GitHub and returns them as WorkItems.
+func (s *GitHubSource) Discover(ctx context.Context) ([]WorkItem, error) {
+	issues, err := s.fetchAllIssues(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []WorkItem
+	for _, issue := range issues {
+		var labels []string
+		for _, l := range issue.Labels {
+			labels = append(labels, l.Name)
+		}
+
+		comments, err := s.fetchComments(ctx, issue.Number)
+		if err != nil {
+			return nil, fmt.Errorf("fetching comments for issue #%d: %w", issue.Number, err)
+		}
+
+		items = append(items, WorkItem{
+			ID:       strconv.Itoa(issue.Number),
+			Number:   issue.Number,
+			Title:    issue.Title,
+			Body:     issue.Body,
+			URL:      issue.HTMLURL,
+			Labels:   labels,
+			Comments: comments,
+		})
+	}
+
+	return items, nil
+}
+
+func (s *GitHubSource) fetchAllIssues(ctx context.Context) ([]githubIssue, error) {
+	var allIssues []githubIssue
+
+	pageURL := s.buildIssuesURL()
+
+	for page := 0; pageURL != "" && page < maxPages; page++ {
+		issues, nextURL, err := s.fetchIssuesPage(ctx, pageURL)
+		if err != nil {
+			return nil, err
+		}
+		allIssues = append(allIssues, issues...)
+		pageURL = nextURL
+	}
+
+	return allIssues, nil
+}
+
+func (s *GitHubSource) buildIssuesURL() string {
+	u := fmt.Sprintf("%s/repos/%s/%s/issues", s.baseURL(), s.Owner, s.Repo)
+
+	params := url.Values{}
+	params.Set("per_page", "100")
+
+	state := s.State
+	if state == "" {
+		state = "open"
+	}
+	params.Set("state", state)
+
+	if len(s.Labels) > 0 {
+		params.Set("labels", strings.Join(s.Labels, ","))
+	}
+
+	return u + "?" + params.Encode()
+}
+
+func (s *GitHubSource) fetchIssuesPage(ctx context.Context, pageURL string) ([]githubIssue, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("creating request: %w", err)
+	}
+
+	if s.Token != "" {
+		req.Header.Set("Authorization", "token "+s.Token)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("fetching issues: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, "", fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var issues []githubIssue
+	if err := json.NewDecoder(resp.Body).Decode(&issues); err != nil {
+		return nil, "", fmt.Errorf("decoding issues: %w", err)
+	}
+
+	nextURL := parseNextLink(resp.Header.Get("Link"))
+
+	return issues, nextURL, nil
+}
+
+func (s *GitHubSource) fetchComments(ctx context.Context, issueNumber int) (string, error) {
+	u := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments?per_page=100", s.baseURL(), s.Owner, s.Repo, issueNumber)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	if s.Token != "" {
+		req.Header.Set("Authorization", "token "+s.Token)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetching comments: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var comments []githubComment
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return "", fmt.Errorf("decoding comments: %w", err)
+	}
+
+	var parts []string
+	totalBytes := 0
+	for _, c := range comments {
+		totalBytes += len(c.Body)
+		if totalBytes > maxCommentBytes {
+			break
+		}
+		parts = append(parts, c.Body)
+	}
+
+	return strings.Join(parts, "\n---\n"), nil
+}
+
+var linkNextRe = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
+
+func parseNextLink(header string) string {
+	matches := linkNextRe.FindStringSubmatch(header)
+	if len(matches) < 2 {
+		return ""
+	}
+	return matches[1]
+}

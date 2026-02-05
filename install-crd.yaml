@@ -131,3 +131,199 @@ spec:
     storage: true
     subresources:
       status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: taskspawners.axon.io
+spec:
+  group: axon.io
+  names:
+    kind: TaskSpawner
+    listKind: TaskSpawnerList
+    plural: taskspawners
+    singular: taskspawner
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.when.githubIssues.repo
+      name: Source
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.totalDiscovered
+      name: Discovered
+      type: integer
+    - jsonPath: .status.totalTasksCreated
+      name: Tasks
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TaskSpawner is the Schema for the taskspawners API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TaskSpawnerSpec defines the desired state of TaskSpawner.
+            properties:
+              pollInterval:
+                default: 5m
+                description: PollInterval is how often to poll the source for new
+                  items (e.g., "5m"). Defaults to "5m".
+                type: string
+              taskTemplate:
+                description: TaskTemplate defines the template for spawned Tasks.
+                properties:
+                  credentials:
+                    description: Credentials specifies how to authenticate with the
+                      agent.
+                    properties:
+                      secretRef:
+                        description: SecretRef references the Secret containing credentials.
+                        properties:
+                          name:
+                            description: Name is the name of the secret.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type:
+                        description: Type specifies the credential type (api-key or
+                          oauth).
+                        enum:
+                        - api-key
+                        - oauth
+                        type: string
+                    required:
+                    - secretRef
+                    - type
+                    type: object
+                  model:
+                    description: Model optionally overrides the default model.
+                    type: string
+                  promptTemplate:
+                    description: |-
+                      PromptTemplate is a Go text/template for rendering the task prompt.
+                      Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}.
+                    type: string
+                  type:
+                    description: Type specifies the agent type (e.g., claude-code).
+                    type: string
+                  workspace:
+                    description: Workspace optionally specifies a git repository for
+                      the agent to work in.
+                    properties:
+                      ref:
+                        description: |-
+                          Ref is the git reference to checkout (branch, tag, or commit SHA).
+                          Defaults to the repository's default branch if not specified.
+                        type: string
+                      repo:
+                        description: Repo is the git repository URL to clone.
+                        pattern: ^(https?://|git://|git@).*
+                        type: string
+                    required:
+                    - repo
+                    type: object
+                required:
+                - credentials
+                - type
+                type: object
+              when:
+                description: When defines the conditions that trigger task spawning.
+                properties:
+                  githubIssues:
+                    description: GitHubIssues discovers issues from a GitHub repository.
+                    properties:
+                      labels:
+                        description: Labels filters issues by labels.
+                        items:
+                          type: string
+                        type: array
+                      owner:
+                        description: Owner is the GitHub repository owner.
+                        type: string
+                      repo:
+                        description: Repo is the GitHub repository name.
+                        type: string
+                      state:
+                        default: open
+                        description: State filters issues by state (open, closed,
+                          all). Defaults to open.
+                        enum:
+                        - open
+                        - closed
+                        - all
+                        type: string
+                      tokenSecretRef:
+                        description: |-
+                          TokenSecretRef references a Secret containing a GitHub token.
+                          The secret must have a key named GITHUB_TOKEN.
+                        properties:
+                          name:
+                            description: Name is the name of the secret.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - owner
+                    - repo
+                    type: object
+                type: object
+            required:
+            - taskTemplate
+            - when
+            type: object
+          status:
+            description: TaskSpawnerStatus defines the observed state of TaskSpawner.
+            properties:
+              deploymentName:
+                description: DeploymentName is the name of the Deployment running
+                  the spawner.
+                type: string
+              lastDiscoveryTime:
+                description: LastDiscoveryTime is the last time the source was polled.
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  status.
+                type: string
+              phase:
+                description: Phase represents the current phase of the TaskSpawner.
+                type: string
+              totalDiscovered:
+                description: TotalDiscovered is the total number of work items discovered.
+                type: integer
+              totalTasksCreated:
+                description: TotalTasksCreated is the total number of Tasks created.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

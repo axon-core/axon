@@ -33,6 +33,20 @@ flowchart LR
     AC --> J3[Job 3] --> P3["Pod 3 (--dangerously-skip-permissions)"] --> F3[Failed]
 ```
 
+### TaskSpawner — Automatic Task Creation from External Sources
+
+TaskSpawner watches external sources (e.g., GitHub Issues) and automatically creates Tasks for each discovered item.
+
+```mermaid
+flowchart LR
+    TS["TaskSpawner"] -- "polls" --> GH["GitHub Issues"]
+    GH -- "new issues" --> TS
+    TS -- "creates" --> T1["Task: fix-bugs-1"]
+    TS -- "creates" --> T2["Task: fix-bugs-2"]
+```
+
+---
+
 1. You **apply a Task** manifest with a prompt, agent type, credential reference, and optionally a git repo to clone.
 2. The **Axon controller** creates a Kubernetes **Job**.
 3. If a workspace is specified, an **init container clones the repo**. Then the agent Pod starts with `--dangerously-skip-permissions`.
@@ -163,6 +177,7 @@ Or pass `--secret` to `axon run` with a pre-created secret (api-key is the defau
 | CI-Native | Trigger agents from any pipeline via `kubectl`, Helm, Argo, or your own tooling |
 | Git Workspace | Clone a repo into the agent's working directory via `spec.workspace` |
 | Config File | Set token, model, namespace, and workspace in `~/.axon/config.yaml` — secrets are auto-created |
+| TaskSpawner | Automatically create Tasks from GitHub Issues (or other sources) via a long-running spawner |
 | CLI | `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage tasks without writing YAML |
 | Full Lifecycle | `Pending` → `Running` → `Succeeded` / `Failed` |
 | Owner References | Delete a Task and its Job + Pod are automatically cleaned up |
@@ -194,6 +209,51 @@ Or pass `--secret` to `axon run` with a pre-created secret (api-key is the defau
 | `spec.model` | Model override (e.g., `claude-sonnet-4-20250514`) | No |
 | `spec.workspace.repo` | Git repository URL to clone (HTTPS, git://, or SSH) | No |
 | `spec.workspace.ref` | Branch, tag, or commit SHA to checkout (defaults to repo's default branch) | No |
+
+### TaskSpawner Spec
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `spec.when.githubIssues.owner` | GitHub repository owner | Yes |
+| `spec.when.githubIssues.repo` | GitHub repository name | Yes |
+| `spec.when.githubIssues.labels` | Filter issues by labels | No |
+| `spec.when.githubIssues.state` | Filter by state: `open`, `closed`, `all` (default: `open`) | No |
+| `spec.when.githubIssues.tokenSecretRef.name` | Secret containing `GITHUB_TOKEN` | No |
+| `spec.taskTemplate.type` | Agent type (`claude-code`) | Yes |
+| `spec.taskTemplate.credentials` | Credentials for the agent (same as Task) | Yes |
+| `spec.taskTemplate.model` | Model override | No |
+| `spec.taskTemplate.workspace` | Git workspace for spawned Tasks | No |
+| `spec.taskTemplate.promptTemplate` | Go text/template for prompt (`{{.Title}}`, `{{.Body}}`, `{{.Number}}`, etc.) | No |
+| `spec.pollInterval` | How often to poll the source (default: `5m`) | No |
+
+<details>
+<summary>Example TaskSpawner YAML</summary>
+
+```yaml
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: fix-bugs
+spec:
+  when:
+    githubIssues:
+      owner: your-org
+      repo: your-repo
+      labels: [bug]
+      state: open
+      tokenSecretRef:
+        name: github-token
+  taskTemplate:
+    type: claude-code
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: "Fix: {{.Title}}\n{{.Body}}"
+  pollInterval: 5m
+```
+
+</details>
 
 ### Task Status
 
@@ -254,6 +314,9 @@ axon run -p "Fix bug" --secret other-secret --credential-type api-key
 
 # List tasks
 axon get tasks
+
+# List task spawners
+axon get taskspawners
 
 # View logs (follow mode)
 axon logs my-task -f
