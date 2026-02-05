@@ -187,3 +187,10 @@ func axonFail(args ...string) {
 	err := cmd.Run()
 	Expect(err).To(HaveOccurred())
 }
+
+func axonCommand(args ...string) *exec.Cmd {
+	cmd := exec.Command(axonBin(), args...)
+	cmd.Stdout = GinkgoWriter
+	cmd.Stderr = GinkgoWriter
+	return cmd
+}
