@@ -31,6 +31,7 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=axon.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=axon.io,resources=tasks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=axon.io,resources=tasks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=axon.io,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
@@ -115,7 +116,28 @@ func (r *TaskReconciler) handleDeletion(ctx context.Context, task *axonv1alpha1.
 func (r *TaskReconciler) createJob(ctx context.Context, task *axonv1alpha1.Task) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	job, err := r.JobBuilder.Build(task)
+	var workspace *axonv1alpha1.WorkspaceSpec
+	if task.Spec.WorkspaceRef != nil {
+		var ws axonv1alpha1.Workspace
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: task.Namespace,
+			Name:      task.Spec.WorkspaceRef.Name,
+		}, &ws); err != nil {
+			logger.Error(err, "Unable to fetch Workspace", "workspace", task.Spec.WorkspaceRef.Name)
+			if apierrors.IsNotFound(err) {
+				task.Status.Phase = axonv1alpha1.TaskPhaseFailed
+				task.Status.Message = fmt.Sprintf("Workspace %q not found", task.Spec.WorkspaceRef.Name)
+				if updateErr := r.Status().Update(ctx, task); updateErr != nil {
+					logger.Error(updateErr, "Unable to update Task status")
+				}
+				return ctrl.Result{}, nil
+			}
+			return ctrl.Result{}, err
+		}
+		workspace = &ws.Spec
+	}
+
+	job, err := r.JobBuilder.Build(task, workspace)
 	if err != nil {
 		logger.Error(err, "unable to build Job")
 		task.Status.Phase = axonv1alpha1.TaskPhaseFailed

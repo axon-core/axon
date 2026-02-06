@@ -97,6 +97,7 @@ var _ = Describe("Task with workspace", func() {
 		By("cleaning up existing resources")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 		kubectl("delete", "task", workspaceTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-workspace", "--ignore-not-found")
 	})
 
 	AfterEach(func() {
@@ -107,6 +108,7 @@ var _ = Describe("Task with workspace", func() {
 
 		By("cleaning up test resources")
 		kubectl("delete", "task", workspaceTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-workspace", "--ignore-not-found")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 	})
 
@@ -115,7 +117,18 @@ var _ = Describe("Task with workspace", func() {
 		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
 			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
 
-		By("creating a Task with workspace")
+		By("creating a Workspace resource")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("creating a Task with workspace ref")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
@@ -128,9 +141,8 @@ spec:
     type: oauth
     secretRef:
       name: claude-credentials
-  workspace:
-    repo: https://github.com/gjkim42/axon.git
-    ref: main
+  workspaceRef:
+    name: e2e-workspace
 `
 		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
 
@@ -170,6 +182,7 @@ var _ = Describe("Task with workspace and secretRef", func() {
 		By("cleaning up existing resources")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 		kubectl("delete", "secret", "workspace-credentials", "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-github-workspace", "--ignore-not-found")
 		kubectl("delete", "task", githubTaskName, "--ignore-not-found")
 	})
 
@@ -181,6 +194,7 @@ var _ = Describe("Task with workspace and secretRef", func() {
 
 		By("cleaning up test resources")
 		kubectl("delete", "task", githubTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-github-workspace", "--ignore-not-found")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 		kubectl("delete", "secret", "workspace-credentials", "--ignore-not-found")
 	})
@@ -194,7 +208,20 @@ var _ = Describe("Task with workspace and secretRef", func() {
 		Expect(kubectlWithInput("", "create", "secret", "generic", "workspace-credentials",
 			"--from-literal=GITHUB_TOKEN="+githubToken)).To(Succeed())
 
-		By("creating a Task with workspace and secretRef")
+		By("creating a Workspace resource with secretRef")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-github-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+  secretRef:
+    name: workspace-credentials
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("creating a Task with workspace ref")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
@@ -207,11 +234,8 @@ spec:
     type: oauth
     secretRef:
       name: claude-credentials
-  workspace:
-    repo: https://github.com/gjkim42/axon.git
-    ref: main
-    secretRef:
-      name: workspace-credentials
+  workspaceRef:
+    name: e2e-github-workspace
 `
 		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
 

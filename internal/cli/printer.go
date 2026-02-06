@@ -34,14 +34,8 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	if t.Spec.Model != "" {
 		printField(w, "Model", t.Spec.Model)
 	}
-	if t.Spec.Workspace != nil {
-		printField(w, "Workspace Repo", t.Spec.Workspace.Repo)
-		if t.Spec.Workspace.Ref != "" {
-			printField(w, "Workspace Ref", t.Spec.Workspace.Ref)
-		}
-		if t.Spec.Workspace.SecretRef != nil {
-			printField(w, "Workspace Secret", t.Spec.Workspace.SecretRef.Name)
-		}
+	if t.Spec.WorkspaceRef != nil {
+		printField(w, "Workspace", t.Spec.WorkspaceRef.Name)
 	}
 	if t.Status.JobName != "" {
 		printField(w, "Job", t.Status.JobName)
@@ -66,8 +60,8 @@ func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner) {
 	for _, s := range spawners {
 		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
 		source := ""
-		if s.Spec.When.GitHubIssues != nil {
-			source = s.Spec.When.GitHubIssues.Owner + "/" + s.Spec.When.GitHubIssues.Repo
+		if s.Spec.When.GitHubIssues != nil && s.Spec.When.GitHubIssues.WorkspaceRef != nil {
+			source = s.Spec.When.GitHubIssues.WorkspaceRef.Name
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
 			s.Name, source, s.Status.Phase,
@@ -83,7 +77,9 @@ func printTaskSpawnerDetail(w io.Writer, ts *axonv1alpha1.TaskSpawner) {
 	if ts.Spec.When.GitHubIssues != nil {
 		gh := ts.Spec.When.GitHubIssues
 		printField(w, "Source", "GitHub Issues")
-		printField(w, "Repository", gh.Owner+"/"+gh.Repo)
+		if gh.WorkspaceRef != nil {
+			printField(w, "Workspace", gh.WorkspaceRef.Name)
+		}
 		if gh.State != "" {
 			printField(w, "State", gh.State)
 		}
@@ -95,11 +91,8 @@ func printTaskSpawnerDetail(w io.Writer, ts *axonv1alpha1.TaskSpawner) {
 	if ts.Spec.TaskTemplate.Model != "" {
 		printField(w, "Model", ts.Spec.TaskTemplate.Model)
 	}
-	if ts.Spec.TaskTemplate.Workspace != nil {
-		printField(w, "Workspace Repo", ts.Spec.TaskTemplate.Workspace.Repo)
-		if ts.Spec.TaskTemplate.Workspace.Ref != "" {
-			printField(w, "Workspace Ref", ts.Spec.TaskTemplate.Workspace.Ref)
-		}
+	if ts.Spec.When.GitHubIssues != nil && ts.Spec.When.GitHubIssues.WorkspaceRef != nil {
+		printField(w, "Workspace", ts.Spec.When.GitHubIssues.WorkspaceRef.Name)
 	}
 	printField(w, "Poll Interval", ts.Spec.PollInterval)
 	if ts.Status.DeploymentName != "" {

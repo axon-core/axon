@@ -83,13 +83,27 @@ func (r *TaskSpawnerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Resolve workspace for GitHub Issues source
+	var workspace *axonv1alpha1.WorkspaceSpec
+	if gh := ts.Spec.When.GitHubIssues; gh != nil && gh.WorkspaceRef != nil {
+		var ws axonv1alpha1.Workspace
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: ts.Namespace,
+			Name:      gh.WorkspaceRef.Name,
+		}, &ws); err != nil {
+			logger.Error(err, "Unable to fetch Workspace for TaskSpawner", "workspace", gh.WorkspaceRef.Name)
+			return ctrl.Result{}, err
+		}
+		workspace = &ws.Spec
+	}
+
 	// Create Deployment if it doesn't exist
 	if !deployExists {
-		return r.createDeployment(ctx, &ts)
+		return r.createDeployment(ctx, &ts, workspace)
 	}
 
 	// Update Deployment if spec changed
-	if err := r.updateDeployment(ctx, &ts, &deploy); err != nil {
+	if err := r.updateDeployment(ctx, &ts, &deploy, workspace); err != nil {
 		logger.Error(err, "unable to update Deployment")
 		return ctrl.Result{}, err
 	}
@@ -127,10 +141,10 @@ func (r *TaskSpawnerReconciler) handleDeletion(ctx context.Context, ts *axonv1al
 }
 
 // createDeployment creates a Deployment for the TaskSpawner.
-func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner) (ctrl.Result, error) {
+func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, workspace *axonv1alpha1.WorkspaceSpec) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	deploy := r.DeploymentBuilder.Build(ts)
+	deploy := r.DeploymentBuilder.Build(ts, workspace)
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(ts, deploy, r.Scheme); err != nil {
@@ -160,10 +174,10 @@ func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1
 }
 
 // updateDeployment updates the Deployment to match the desired spec if it has drifted.
-func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, deploy *appsv1.Deployment) error {
+func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, deploy *appsv1.Deployment, workspace *axonv1alpha1.WorkspaceSpec) error {
 	logger := log.FromContext(ctx)
 
-	desired := r.DeploymentBuilder.Build(ts)
+	desired := r.DeploymentBuilder.Build(ts, workspace)
 
 	// Compare container spec (image, args, env)
 	if len(deploy.Spec.Template.Spec.Containers) == 0 {

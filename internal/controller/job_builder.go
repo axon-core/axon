@@ -44,17 +44,17 @@ func NewJobBuilder() *JobBuilder {
 }
 
 // Build creates a Job for the given Task.
-func (b *JobBuilder) Build(task *axonv1alpha1.Task) (*batchv1.Job, error) {
+func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec) (*batchv1.Job, error) {
 	switch task.Spec.Type {
 	case AgentTypeClaudeCode:
-		return b.buildClaudeCodeJob(task)
+		return b.buildClaudeCodeJob(task, workspace)
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", task.Spec.Type)
 	}
 }
 
 // buildClaudeCodeJob creates a Job for Claude Code agent.
-func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task) (*batchv1.Job, error) {
+func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec) (*batchv1.Job, error) {
 	args := []string{
 		"--dangerously-skip-permissions",
 		"--output-format", "stream-json",
@@ -96,10 +96,10 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task) (*batchv1.Job, 
 	}
 
 	var workspaceEnvVars []corev1.EnvVar
-	if task.Spec.Workspace != nil && task.Spec.Workspace.SecretRef != nil {
+	if workspace != nil && workspace.SecretRef != nil {
 		secretKeyRef := &corev1.SecretKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
-				Name: task.Spec.Workspace.SecretRef.Name,
+				Name: workspace.SecretRef.Name,
 			},
 			Key: "GITHUB_TOKEN",
 		}
@@ -130,7 +130,7 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task) (*batchv1.Job, 
 	var volumes []corev1.Volume
 	var podSecurityContext *corev1.PodSecurityContext
 
-	if task.Spec.Workspace != nil {
+	if workspace != nil {
 		podSecurityContext = &corev1.PodSecurityContext{
 			FSGroup: &claudeCodeUID,
 		}
@@ -149,12 +149,12 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task) (*batchv1.Job, 
 		}
 
 		cloneArgs := []string{"clone"}
-		if task.Spec.Workspace.Ref != "" {
-			cloneArgs = append(cloneArgs, "--branch", task.Spec.Workspace.Ref)
+		if workspace.Ref != "" {
+			cloneArgs = append(cloneArgs, "--branch", workspace.Ref)
 		}
-		cloneArgs = append(cloneArgs, "--single-branch", "--depth", "1", "--", task.Spec.Workspace.Repo, WorkspaceMountPath+"/repo")
+		cloneArgs = append(cloneArgs, "--single-branch", "--depth", "1", "--", workspace.Repo, WorkspaceMountPath+"/repo")
 
-		initContainers = append(initContainers, corev1.Container{
+		initContainer := corev1.Container{
 			Name:         "git-clone",
 			Image:        GitCloneImage,
 			Args:         cloneArgs,
@@ -163,7 +163,16 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task) (*batchv1.Job, 
 			SecurityContext: &corev1.SecurityContext{
 				RunAsUser: &claudeCodeUID,
 			},
-		})
+		}
+
+		if workspace.SecretRef != nil {
+			initContainer.Command = []string{"sh", "-c",
+				`exec git -c credential.helper='!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f' "$@"`,
+			}
+			initContainer.Args = append([]string{"--"}, cloneArgs...)
+		}
+
+		initContainers = append(initContainers, initContainer)
 
 		mainContainer.VolumeMounts = []corev1.VolumeMount{volumeMount}
 		mainContainer.WorkingDir = WorkspaceMountPath + "/repo"

@@ -80,32 +80,15 @@ spec:
               type:
                 description: Type specifies the agent type (e.g., claude-code).
                 type: string
-              workspace:
-                description: Workspace optionally specifies a git repository for the
-                  agent to work in.
+              workspaceRef:
+                description: WorkspaceRef optionally references a Workspace resource
+                  for the agent to work in.
                 properties:
-                  ref:
-                    description: |-
-                      Ref is the git reference to checkout (branch, tag, or commit SHA).
-                      Defaults to the repository's default branch if not specified.
+                  name:
+                    description: Name is the name of the Workspace resource.
                     type: string
-                  repo:
-                    description: Repo is the git repository URL to clone.
-                    pattern: ^(https?://|git://|git@).*
-                    type: string
-                  secretRef:
-                    description: |-
-                      SecretRef optionally references a Secret containing a GITHUB_TOKEN
-                      for git authentication and GitHub CLI (gh) operations.
-                    properties:
-                      name:
-                        description: Name is the name of the secret.
-                        type: string
-                    required:
-                    - name
-                    type: object
                 required:
-                - repo
+                - name
                 type: object
             required:
             - credentials
@@ -159,8 +142,8 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.when.githubIssues.repo
-      name: Source
+    - jsonPath: .spec.when.githubIssues.workspaceRef.name
+      name: Workspace
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -242,33 +225,6 @@ spec:
                   type:
                     description: Type specifies the agent type (e.g., claude-code).
                     type: string
-                  workspace:
-                    description: Workspace optionally specifies a git repository for
-                      the agent to work in.
-                    properties:
-                      ref:
-                        description: |-
-                          Ref is the git reference to checkout (branch, tag, or commit SHA).
-                          Defaults to the repository's default branch if not specified.
-                        type: string
-                      repo:
-                        description: Repo is the git repository URL to clone.
-                        pattern: ^(https?://|git://|git@).*
-                        type: string
-                      secretRef:
-                        description: |-
-                          SecretRef optionally references a Secret containing a GITHUB_TOKEN
-                          for git authentication and GitHub CLI (gh) operations.
-                        properties:
-                          name:
-                            description: Name is the name of the secret.
-                            type: string
-                        required:
-                        - name
-                        type: object
-                    required:
-                    - repo
-                    type: object
                 required:
                 - credentials
                 - type
@@ -284,12 +240,6 @@ spec:
                         items:
                           type: string
                         type: array
-                      owner:
-                        description: Owner is the GitHub repository owner.
-                        type: string
-                      repo:
-                        description: Repo is the GitHub repository name.
-                        type: string
                       state:
                         default: open
                         description: State filters issues by state (open, closed,
@@ -299,20 +249,18 @@ spec:
                         - closed
                         - all
                         type: string
-                      tokenSecretRef:
-                        description: |-
-                          TokenSecretRef references a Secret containing a GitHub token.
-                          The secret must have a key named GITHUB_TOKEN.
+                      workspaceRef:
+                        description: WorkspaceRef references the Workspace that defines
+                          the GitHub repository.
                         properties:
                           name:
-                            description: Name is the name of the secret.
+                            description: Name is the name of the Workspace resource.
                             type: string
                         required:
                         - name
                         type: object
                     required:
-                    - owner
-                    - repo
+                    - workspaceRef
                     type: object
                 type: object
             required:
@@ -349,3 +297,70 @@ spec:
     storage: true
     subresources:
       status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: workspaces.axon.io
+spec:
+  group: axon.io
+  names:
+    kind: Workspace
+    listKind: WorkspaceList
+    plural: workspaces
+    singular: workspace
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Workspace is the Schema for the workspaces API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WorkspaceSpec defines the desired state of Workspace.
+            properties:
+              ref:
+                description: |-
+                  Ref is the git reference to checkout (branch, tag, or commit SHA).
+                  Defaults to the repository's default branch if not specified.
+                type: string
+              repo:
+                description: Repo is the git repository URL to clone.
+                pattern: ^(https?://|git://|git@).*
+                type: string
+              secretRef:
+                description: |-
+                  SecretRef references a Secret containing a GITHUB_TOKEN key for git
+                  authentication and GitHub CLI (gh) operations.
+                properties:
+                  name:
+                    description: Name is the name of the secret.
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - repo
+            type: object
+        type: object
+    served: true
+    storage: true

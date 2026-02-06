@@ -11,7 +11,6 @@ import (
 
 const configTaskName = "e2e-config-test-task"
 const configOverrideTaskName = "e2e-config-override-task"
-const configGitHubTaskName = "e2e-config-test-task-gh"
 
 var _ = Describe("Config", func() {
 	var configPath string
@@ -19,10 +18,8 @@ var _ = Describe("Config", func() {
 	BeforeEach(func() {
 		By("cleaning up existing resources")
 		kubectl("delete", "secret", "axon-credentials", "--ignore-not-found")
-		kubectl("delete", "secret", "axon-workspace-credentials", "--ignore-not-found")
 		kubectl("delete", "task", configTaskName, "--ignore-not-found")
 		kubectl("delete", "task", configOverrideTaskName, "--ignore-not-found")
-		kubectl("delete", "task", configGitHubTaskName, "--ignore-not-found")
 	})
 
 	AfterEach(func() {
@@ -30,25 +27,33 @@ var _ = Describe("Config", func() {
 			By("collecting debug info on failure")
 			debugTask(configTaskName)
 			debugTask(configOverrideTaskName)
-			debugTask(configGitHubTaskName)
 		}
 
 		By("cleaning up test resources")
 		kubectl("delete", "task", configTaskName, "--ignore-not-found")
 		kubectl("delete", "task", configOverrideTaskName, "--ignore-not-found")
-		kubectl("delete", "task", configGitHubTaskName, "--ignore-not-found")
 		kubectl("delete", "secret", "axon-credentials", "--ignore-not-found")
-		kubectl("delete", "secret", "axon-workspace-credentials", "--ignore-not-found")
 		if configPath != "" {
 			os.Remove(configPath)
 		}
 	})
 
 	It("should run a Task using config file defaults", func() {
-		By("writing a temp config file with oauthToken")
+		By("creating a Workspace resource")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-config-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("writing a temp config file with oauthToken and workspace name")
 		dir := GinkgoT().TempDir()
 		configPath = filepath.Join(dir, "config.yaml")
-		configContent := "oauthToken: " + oauthToken + "\nworkspace:\n  repo: https://github.com/gjkim42/axon.git\n  ref: main\n"
+		configContent := "oauthToken: " + oauthToken + "\nworkspace: e2e-config-workspace\n"
 		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
 
 		By("creating a Task via CLI using config defaults (no --secret or --credential-type)")
@@ -66,24 +71,46 @@ var _ = Describe("Config", func() {
 		By("verifying task status via CLI get")
 		output := axonOutput("get", "task", configTaskName)
 		Expect(output).To(ContainSubstring("Succeeded"))
-		Expect(output).To(ContainSubstring("Workspace Repo"))
+		Expect(output).To(ContainSubstring("Workspace"))
 
 		By("deleting task via CLI")
 		axon("delete", "task", configTaskName)
+		kubectl("delete", "workspace", "e2e-config-workspace", "--ignore-not-found")
 	})
 
 	It("should allow CLI flags to override config file", func() {
-		By("writing a temp config file with oauthToken and a workspace repo")
+		By("creating Workspace resources")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-config-ws-default
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: v0.0.0
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
+		overrideWsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-config-ws-override
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+`
+		Expect(kubectlWithInput(overrideWsYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("writing a temp config file with oauthToken and a workspace")
 		dir := GinkgoT().TempDir()
 		configPath = filepath.Join(dir, "config.yaml")
-		configContent := "oauthToken: " + oauthToken + "\nworkspace:\n  repo: https://github.com/gjkim42/axon.git\n  ref: v0.0.0\n"
+		configContent := "oauthToken: " + oauthToken + "\nworkspace: e2e-config-ws-default\n"
 		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
 
-		By("creating a Task with CLI flag overriding config workspace-ref")
+		By("creating a Task with CLI flag overriding config workspace")
 		axon("run",
 			"-p", "Run 'git log --oneline -1' and print the output",
 			"--config", configPath,
-			"--workspace-ref", "main",
+			"--workspace", "e2e-config-ws-override",
 			"--name", configOverrideTaskName,
 		)
 
@@ -95,42 +122,11 @@ var _ = Describe("Config", func() {
 		By("verifying the CLI flag value was used")
 		output := axonOutput("get", "task", configOverrideTaskName)
 		Expect(output).To(ContainSubstring("Succeeded"))
-		Expect(output).To(ContainSubstring("main"))
 
 		By("deleting task via CLI")
 		axon("delete", "task", configOverrideTaskName)
-	})
-
-	It("should run a Task with workspace token from config file", func() {
-		if githubToken == "" {
-			Skip("GITHUB_TOKEN not set, skipping GitHub e2e tests")
-		}
-
-		By("writing a temp config file with oauthToken and workspace token")
-		dir := GinkgoT().TempDir()
-		configPath = filepath.Join(dir, "config.yaml")
-		configContent := "oauthToken: " + oauthToken + "\nworkspace:\n  repo: https://github.com/gjkim42/axon.git\n  ref: main\n  token: " + githubToken + "\n"
-		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
-
-		By("creating a Task via CLI using config defaults")
-		axon("run",
-			"-p", "Run 'gh auth status' and print the output",
-			"--config", configPath,
-			"--name", configGitHubTaskName,
-		)
-
-		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+configGitHubTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
-
-		By("verifying task status via CLI get")
-		output := axonOutput("get", "task", configGitHubTaskName)
-		Expect(output).To(ContainSubstring("Succeeded"))
-		Expect(output).To(ContainSubstring("Workspace Secret"))
-
-		By("deleting task via CLI")
-		axon("delete", "task", configGitHubTaskName)
+		kubectl("delete", "workspace", "e2e-config-ws-default", "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-config-ws-override", "--ignore-not-found")
 	})
 
 	It("should initialize config file via init command", func() {

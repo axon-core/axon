@@ -119,29 +119,45 @@ The file has been created.
 Run against a git repo:
 
 ```bash
-axon run -p "Add unit tests" \
-  --workspace-repo https://github.com/your-org/repo.git --workspace-ref main
+axon run -p "Add unit tests" --workspace my-workspace
 ```
 
-Have the agent create a PR — add a GitHub token to your config:
+Have the agent create a PR — add `secretRef` to your Workspace resource:
 
 ```yaml
-# ~/.axon/config.yaml
-oauthToken: <your-oauth-token>
-workspace:
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: my-workspace
+spec:
   repo: https://github.com/your-org/repo.git
   ref: main
-  token: <your-github-token>  # enables git push and gh CLI
+  secretRef:
+    name: github-token  # Secret with key GITHUB_TOKEN
 ```
 
 ```bash
-axon run -p "Fix the bug described in issue #42 and open a PR with the fix"
+axon run -p "Fix the bug described in issue #42 and open a PR with the fix" --workspace my-workspace
 ```
 
 The `gh` CLI and `GITHUB_TOKEN` are available inside the agent container, so the agent can push branches and create PRs autonomously.
 
 <details>
 <summary>Using kubectl and YAML instead of the CLI</summary>
+
+Create a `Workspace` resource to define a git repository:
+
+```yaml
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: my-workspace
+spec:
+  repo: https://github.com/your-org/your-repo.git
+  ref: main
+```
+
+Then reference it from a `Task`:
 
 ```yaml
 apiVersion: axon.io/v1alpha1
@@ -155,29 +171,14 @@ spec:
     type: oauth
     secretRef:
       name: claude-oauth
+  workspaceRef:
+    name: my-workspace
 ```
 
 ```bash
+kubectl apply -f workspace.yaml
 kubectl apply -f task.yaml
 kubectl get tasks -w
-```
-
-Add `spec.workspace` to clone a repo before the agent starts:
-
-```yaml
-  workspace:
-    repo: https://github.com/your-org/your-repo.git
-    ref: main
-```
-
-Add `spec.workspace.secretRef` to inject a `GITHUB_TOKEN` for git push and `gh` CLI:
-
-```yaml
-  workspace:
-    repo: https://github.com/your-org/your-repo.git
-    ref: main
-    secretRef:
-      name: github-token  # Secret with key GITHUB_TOKEN
 ```
 
 </details>
@@ -202,7 +203,7 @@ Or pass `--secret` to `axon run` with a pre-created secret (api-key is the defau
 | Safe Autonomy | Agents run with `--dangerously-skip-permissions` inside isolated, ephemeral Pods |
 | Scale Out | Run hundreds of agents in parallel — Kubernetes handles scheduling |
 | CI-Native | Trigger agents from any pipeline via `kubectl`, Helm, Argo, or your own tooling |
-| Git Workspace | Clone a repo into the agent's working directory via `spec.workspace`, with optional `GITHUB_TOKEN` for private repos and PR creation |
+| Git Workspace | Clone a repo into the agent's working directory via a Workspace resource, with optional `GITHUB_TOKEN` for private repos and PR creation |
 | Config File | Set token, model, namespace, and workspace in `~/.axon/config.yaml` — secrets are auto-created |
 | TaskSpawner | Automatically create Tasks from GitHub Issues (or other sources) via a long-running spawner |
 | CLI | `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage tasks without writing YAML |
@@ -234,23 +235,26 @@ Or pass `--secret` to `axon run` with a pre-created secret (api-key is the defau
 | `spec.credentials.type` | `api-key` or `oauth` | Yes |
 | `spec.credentials.secretRef.name` | Secret name with credentials | Yes |
 | `spec.model` | Model override (e.g., `claude-sonnet-4-20250514`) | No |
-| `spec.workspace.repo` | Git repository URL to clone (HTTPS, git://, or SSH) | No |
-| `spec.workspace.ref` | Branch, tag, or commit SHA to checkout (defaults to repo's default branch) | No |
-| `spec.workspace.secretRef.name` | Secret containing `GITHUB_TOKEN` for git auth and `gh` CLI | No |
+| `spec.workspaceRef.name` | Name of a Workspace resource to use | No |
+
+### Workspace Spec
+
+| Field | Description | Required |
+|-------|-------------|----------|
+| `spec.repo` | Git repository URL to clone (HTTPS, git://, or SSH) | Yes |
+| `spec.ref` | Branch, tag, or commit SHA to checkout (defaults to repo's default branch) | No |
+| `spec.secretRef.name` | Secret containing `GITHUB_TOKEN` for git auth and `gh` CLI | No |
 
 ### TaskSpawner Spec
 
 | Field | Description | Required |
 |-------|-------------|----------|
-| `spec.when.githubIssues.owner` | GitHub repository owner | Yes |
-| `spec.when.githubIssues.repo` | GitHub repository name | Yes |
+| `spec.when.githubIssues.workspaceRef.name` | Workspace resource (repo URL, auth, and clone target for spawned Tasks) | Yes |
 | `spec.when.githubIssues.labels` | Filter issues by labels | No |
 | `spec.when.githubIssues.state` | Filter by state: `open`, `closed`, `all` (default: `open`) | No |
-| `spec.when.githubIssues.tokenSecretRef.name` | Secret containing `GITHUB_TOKEN` | No |
 | `spec.taskTemplate.type` | Agent type (`claude-code`) | Yes |
 | `spec.taskTemplate.credentials` | Credentials for the agent (same as Task) | Yes |
 | `spec.taskTemplate.model` | Model override | No |
-| `spec.taskTemplate.workspace` | Git workspace for spawned Tasks | No |
 | `spec.taskTemplate.promptTemplate` | Go text/template for prompt (`{{.Title}}`, `{{.Body}}`, `{{.Number}}`, etc.) | No |
 | `spec.pollInterval` | How often to poll the source (default: `5m`) | No |
 
@@ -265,12 +269,10 @@ metadata:
 spec:
   when:
     githubIssues:
-      owner: your-org
-      repo: your-repo
+      workspaceRef:
+        name: my-workspace
       labels: [bug]
       state: open
-      tokenSecretRef:
-        name: github-token
   taskTemplate:
     type: claude-code
     credentials:
@@ -304,10 +306,7 @@ oauthToken: <your-oauth-token>
 # or: apiKey: <your-api-key>
 model: claude-sonnet-4-5-20250929
 namespace: my-namespace
-workspace:
-  repo: https://github.com/org/repo.git
-  ref: main
-  token: <your-github-token>  # optional, for git push and gh CLI
+workspace: my-workspace
 ```
 
 | Field | Description |
@@ -318,9 +317,7 @@ workspace:
 | `credentialType` | Credential type when using `secret` (`api-key` or `oauth`) |
 | `model` | Default model override |
 | `namespace` | Default Kubernetes namespace |
-| `workspace.repo` | Default git repository URL to clone |
-| `workspace.ref` | Default git reference to checkout |
-| `workspace.token` | GitHub token — Axon auto-creates the Kubernetes secret and injects `GITHUB_TOKEN` |
+| `workspace` | Name of a Workspace resource to use |
 
 **Precedence:** `--secret` flag > `secret` in config > `oauthToken`/`apiKey` in config.
 
@@ -335,9 +332,8 @@ axon init
 # Run a task
 axon run -p "Refactor auth to use JWT"
 
-# Run against a git repo
-axon run -p "Add unit tests" \
-  --workspace-repo https://github.com/your-org/repo.git --workspace-ref main
+# Run against a git repo (requires a Workspace resource)
+axon run -p "Add unit tests" --workspace my-workspace
 
 # Override config file defaults with CLI flags
 axon run -p "Fix bug" --secret other-secret --credential-type api-key

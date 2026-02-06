@@ -25,14 +25,12 @@ type When struct {
 }
 
 // GitHubIssues discovers issues from a GitHub repository.
+// The repository owner and name are derived from the workspace's repo URL.
+// If the workspace has a secretRef, it is used for GitHub API authentication.
 type GitHubIssues struct {
-	// Owner is the GitHub repository owner.
+	// WorkspaceRef references the Workspace that defines the GitHub repository.
 	// +kubebuilder:validation:Required
-	Owner string `json:"owner"`
-
-	// Repo is the GitHub repository name.
-	// +kubebuilder:validation:Required
-	Repo string `json:"repo"`
+	WorkspaceRef *WorkspaceReference `json:"workspaceRef"`
 
 	// Labels filters issues by labels.
 	// +optional
@@ -43,11 +41,6 @@ type GitHubIssues struct {
 	// +kubebuilder:default=open
 	// +optional
 	State string `json:"state,omitempty"`
-
-	// TokenSecretRef references a Secret containing a GitHub token.
-	// The secret must have a key named GITHUB_TOKEN.
-	// +optional
-	TokenSecretRef *SecretReference `json:"tokenSecretRef,omitempty"`
 }
 
 // TaskTemplate defines the template for spawned Tasks.
@@ -63,10 +56,6 @@ type TaskTemplate struct {
 	// Model optionally overrides the default model.
 	// +optional
 	Model string `json:"model,omitempty"`
-
-	// Workspace optionally specifies a git repository for the agent to work in.
-	// +optional
-	Workspace *Workspace `json:"workspace,omitempty"`
 
 	// PromptTemplate is a Go text/template for rendering the task prompt.
 	// Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}.
@@ -119,7 +108,7 @@ type TaskSpawnerStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Source",type=string,JSONPath=`.spec.when.githubIssues.repo`
+// +kubebuilder:printcolumn:name="Workspace",type=string,JSONPath=`.spec.when.githubIssues.workspaceRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Discovered",type=integer,JSONPath=`.status.totalDiscovered`
 // +kubebuilder:printcolumn:name="Tasks",type=integer,JSONPath=`.status.totalTasksCreated`

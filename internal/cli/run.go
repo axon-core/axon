@@ -25,8 +25,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 		model          string
 		name           string
 		watch          bool
-		workspaceRepo  string
-		workspaceRef   string
+		workspace      string
 	)
 
 	cmd := &cobra.Command{
@@ -43,11 +42,8 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				if !cmd.Flags().Changed("model") && c.Model != "" {
 					model = c.Model
 				}
-				if !cmd.Flags().Changed("workspace-repo") && c.Workspace.Repo != "" {
-					workspaceRepo = c.Workspace.Repo
-				}
-				if !cmd.Flags().Changed("workspace-ref") && c.Workspace.Ref != "" {
-					workspaceRef = c.Workspace.Ref
+				if !cmd.Flags().Changed("workspace") && c.Workspace != "" {
+					workspace = c.Workspace
 				}
 			}
 
@@ -69,14 +65,6 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 					secret = "axon-credentials"
 					credentialType = "api-key"
 				}
-			}
-
-			var workspaceSecret string
-			if cfg.Config != nil && cfg.Config.Workspace.Token != "" {
-				if err := ensureCredentialSecret(cfg, "axon-workspace-credentials", "GITHUB_TOKEN", cfg.Config.Workspace.Token); err != nil {
-					return err
-				}
-				workspaceSecret = "axon-workspace-credentials"
 			}
 
 			if secret == "" {
@@ -110,15 +98,9 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				},
 			}
 
-			if workspaceRepo != "" {
-				task.Spec.Workspace = &axonv1alpha1.Workspace{
-					Repo: workspaceRepo,
-					Ref:  workspaceRef,
-				}
-				if workspaceSecret != "" {
-					task.Spec.Workspace.SecretRef = &axonv1alpha1.SecretReference{
-						Name: workspaceSecret,
-					}
+			if workspace != "" {
+				task.Spec.WorkspaceRef = &axonv1alpha1.WorkspaceReference{
+					Name: workspace,
 				}
 			}
 
@@ -141,8 +123,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().StringVar(&credentialType, "credential-type", "api-key", "credential type (api-key or oauth)")
 	cmd.Flags().StringVar(&model, "model", "", "model override")
 	cmd.Flags().StringVar(&name, "name", "", "task name (auto-generated if omitted)")
-	cmd.Flags().StringVar(&workspaceRepo, "workspace-repo", "", "git repository URL to clone")
-	cmd.Flags().StringVar(&workspaceRef, "workspace-ref", "", "git reference (branch, tag, or commit SHA)")
+	cmd.Flags().StringVar(&workspace, "workspace", "", "name of Workspace resource to use")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch task status after creation")
 
 	cmd.MarkFlagRequired("prompt")

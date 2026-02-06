@@ -10,20 +10,13 @@ import (
 
 // Config holds configuration loaded from the axon config file.
 type Config struct {
-	OAuthToken     string          `json:"oauthToken,omitempty"`
-	APIKey         string          `json:"apiKey,omitempty"`
-	Secret         string          `json:"secret,omitempty"`
-	CredentialType string          `json:"credentialType,omitempty"`
-	Model          string          `json:"model,omitempty"`
-	Namespace      string          `json:"namespace,omitempty"`
-	Workspace      WorkspaceConfig `json:"workspace,omitempty"`
-}
-
-// WorkspaceConfig holds workspace-related configuration.
-type WorkspaceConfig struct {
-	Repo  string `json:"repo,omitempty"`
-	Ref   string `json:"ref,omitempty"`
-	Token string `json:"token,omitempty"`
+	OAuthToken     string `json:"oauthToken,omitempty"`
+	APIKey         string `json:"apiKey,omitempty"`
+	Secret         string `json:"secret,omitempty"`
+	CredentialType string `json:"credentialType,omitempty"`
+	Model          string `json:"model,omitempty"`
+	Namespace      string `json:"namespace,omitempty"`
+	Workspace      string `json:"workspace,omitempty"`
 }
 
 // DefaultConfigPath returns the default config file path (~/.axon/config.yaml).

@@ -31,6 +31,19 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
 
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/gjkim42/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
 			By("Creating a TaskSpawner")
 			ts := &axonv1alpha1.TaskSpawner{
 				ObjectMeta: metav1.ObjectMeta{
@@ -40,8 +53,9 @@ var _ = Describe("TaskSpawner Controller", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					When: axonv1alpha1.When{
 						GitHubIssues: &axonv1alpha1.GitHubIssues{
-							Owner: "gjkim42",
-							Repo:  "axon",
+							WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+								Name: "test-workspace",
+							},
 							State: "open",
 						},
 					},
@@ -96,6 +110,8 @@ var _ = Describe("TaskSpawner Controller", func() {
 			Expect(container.Args).To(ConsistOf(
 				"--taskspawner-name="+ts.Name,
 				"--taskspawner-namespace="+ns.Name,
+				"--github-owner=gjkim42",
+				"--github-repo=axon",
 			))
 
 			By("Verifying the ServiceAccount")
@@ -125,7 +141,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 		})
 	})
 
-	Context("When creating a TaskSpawner with GitHub token secret", func() {
+	Context("When creating a TaskSpawner with workspace secretRef", func() {
 		It("Should create a Deployment with GITHUB_TOKEN env var", func() {
 			By("Creating a namespace")
 			ns := &corev1.Namespace{
@@ -147,7 +163,23 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
-			By("Creating a TaskSpawner with tokenSecretRef")
+			By("Creating a Workspace with secretRef")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-token",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/gjkim42/axon.git",
+					Ref:  "main",
+					SecretRef: &axonv1alpha1.SecretReference{
+						Name: "github-token",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner with workspace secretRef")
 			ts := &axonv1alpha1.TaskSpawner{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-spawner-token",
@@ -156,10 +188,8 @@ var _ = Describe("TaskSpawner Controller", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					When: axonv1alpha1.When{
 						GitHubIssues: &axonv1alpha1.GitHubIssues{
-							Owner: "gjkim42",
-							Repo:  "axon",
-							TokenSecretRef: &axonv1alpha1.SecretReference{
-								Name: "github-token",
+							WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+								Name: "test-workspace-token",
 							},
 						},
 					},
@@ -204,6 +234,18 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
 
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-delete",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/gjkim42/axon.git",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
 			By("Creating a TaskSpawner")
 			ts := &axonv1alpha1.TaskSpawner{
 				ObjectMeta: metav1.ObjectMeta{
@@ -213,8 +255,9 @@ var _ = Describe("TaskSpawner Controller", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					When: axonv1alpha1.When{
 						GitHubIssues: &axonv1alpha1.GitHubIssues{
-							Owner: "gjkim42",
-							Repo:  "axon",
+							WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+								Name: "test-workspace-delete",
+							},
 						},
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
@@ -262,6 +305,18 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
 
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-idempotent",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/gjkim42/axon.git",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
 			By("Creating a TaskSpawner")
 			ts := &axonv1alpha1.TaskSpawner{
 				ObjectMeta: metav1.ObjectMeta{
@@ -271,8 +326,9 @@ var _ = Describe("TaskSpawner Controller", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					When: axonv1alpha1.When{
 						GitHubIssues: &axonv1alpha1.GitHubIssues{
-							Owner: "gjkim42",
-							Repo:  "axon",
+							WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+								Name: "test-workspace-idempotent",
+							},
 						},
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
