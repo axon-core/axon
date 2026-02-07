@@ -142,6 +142,18 @@ spec:
 		Expect(output).To(ContainSubstring(taskSpawnerName))
 		Expect(output).To(ContainSubstring("GitHub Issues"))
 
+		By("verifying YAML output for a single taskspawner")
+		output = axonOutput("get", "taskspawner", taskSpawnerName, "-o", "yaml")
+		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
+		Expect(output).To(ContainSubstring("kind: TaskSpawner"))
+		Expect(output).To(ContainSubstring("name: " + taskSpawnerName))
+
+		By("verifying JSON output for a single taskspawner")
+		output = axonOutput("get", "taskspawner", taskSpawnerName, "-o", "json")
+		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
+		Expect(output).To(ContainSubstring(`"kind": "TaskSpawner"`))
+		Expect(output).To(ContainSubstring(`"name": "` + taskSpawnerName + `"`))
+
 		By("deleting via kubectl")
 		kubectl("delete", "taskspawner", taskSpawnerName)
 
@@ -167,5 +179,21 @@ var _ = Describe("get taskspawner", func() {
 
 	It("should fail for a nonexistent taskspawner", func() {
 		axonFail("get", "taskspawner", "nonexistent-spawner")
+	})
+
+	It("should output taskspawner list in YAML format", func() {
+		output := axonOutput("get", "taskspawners", "-o", "yaml")
+		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
+		Expect(output).To(ContainSubstring("kind: TaskSpawnerList"))
+	})
+
+	It("should output taskspawner list in JSON format", func() {
+		output := axonOutput("get", "taskspawners", "-o", "json")
+		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
+		Expect(output).To(ContainSubstring(`"kind": "TaskSpawnerList"`))
+	})
+
+	It("should fail with unknown output format", func() {
+		axonFail("get", "taskspawners", "-o", "invalid")
 	})
 })
