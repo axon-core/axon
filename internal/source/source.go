@@ -11,6 +11,7 @@ type WorkItem struct {
 	URL      string
 	Labels   []string
 	Comments string
+	Kind     string // "Issue" or "PR"
 }
 
 // Source discovers work items from an external system.

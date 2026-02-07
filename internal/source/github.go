@@ -27,6 +27,7 @@ const (
 type GitHubSource struct {
 	Owner         string
 	Repo          string
+	Types         []string
 	Labels        []string
 	ExcludeLabels []string
 	State         string
@@ -36,11 +37,12 @@ type GitHubSource struct {
 }
 
 type githubIssue struct {
-	Number  int           `json:"number"`
-	Title   string        `json:"title"`
-	Body    string        `json:"body"`
-	HTMLURL string        `json:"html_url"`
-	Labels  []githubLabel `json:"labels"`
+	Number      int           `json:"number"`
+	Title       string        `json:"title"`
+	Body        string        `json:"body"`
+	HTMLURL     string        `json:"html_url"`
+	Labels      []githubLabel `json:"labels"`
+	PullRequest *struct{}     `json:"pull_request,omitempty"`
 }
 
 type githubLabel struct {
@@ -72,7 +74,7 @@ func (s *GitHubSource) Discover(ctx context.Context) ([]WorkItem, error) {
 		return nil, err
 	}
 
-	issues = s.filterIssues(issues)
+	issues = s.filterItems(issues)
 
 	var items []WorkItem
 	for _, issue := range issues {
@@ -86,6 +88,11 @@ func (s *GitHubSource) Discover(ctx context.Context) ([]WorkItem, error) {
 			return nil, fmt.Errorf("fetching comments for issue #%d: %w", issue.Number, err)
 		}
 
+		kind := "Issue"
+		if issue.PullRequest != nil {
+			kind = "PR"
+		}
+
 		items = append(items, WorkItem{
 			ID:       strconv.Itoa(issue.Number),
 			Number:   issue.Number,
@@ -94,16 +101,27 @@ func (s *GitHubSource) Discover(ctx context.Context) ([]WorkItem, error) {
 			URL:      issue.HTMLURL,
 			Labels:   labels,
 			Comments: comments,
+			Kind:     kind,
 		})
 	}
 
 	return items, nil
 }
 
-func (s *GitHubSource) filterIssues(issues []githubIssue) []githubIssue {
-	if len(s.ExcludeLabels) == 0 {
-		return issues
+func (s *GitHubSource) resolvedTypes() map[string]struct{} {
+	types := s.Types
+	if len(types) == 0 {
+		types = []string{"issues"}
 	}
+	m := make(map[string]struct{}, len(types))
+	for _, t := range types {
+		m[t] = struct{}{}
+	}
+	return m
+}
+
+func (s *GitHubSource) filterItems(issues []githubIssue) []githubIssue {
+	types := s.resolvedTypes()
 
 	excluded := make(map[string]struct{}, len(s.ExcludeLabels))
 	for _, l := range s.ExcludeLabels {
@@ -112,6 +130,18 @@ func (s *GitHubSource) filterIssues(issues []githubIssue) []githubIssue {
 
 	filtered := make([]githubIssue, 0, len(issues))
 	for _, issue := range issues {
+		// Type filtering
+		if issue.PullRequest != nil {
+			if _, ok := types["pulls"]; !ok {
+				continue
+			}
+		} else {
+			if _, ok := types["issues"]; !ok {
+				continue
+			}
+		}
+
+		// Exclude-label filtering
 		skip := false
 		for _, l := range issue.Labels {
 			if _, ok := excluded[l.Name]; ok {

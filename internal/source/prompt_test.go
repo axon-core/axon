@@ -13,6 +13,7 @@ func TestRenderPromptDefault(t *testing.T) {
 		Body:   "Users cannot log in after the update.",
 		URL:    "https://github.com/o/r/issues/42",
 		Labels: []string{"bug"},
+		Kind:   "Issue",
 	}
 
 	result, err := RenderPrompt("", item)
@@ -20,14 +21,51 @@ func TestRenderPromptDefault(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !strings.Contains(result, "#42") {
-		t.Errorf("expected issue number in output: %s", result)
+	if !strings.Contains(result, "Issue #42") {
+		t.Errorf("expected 'Issue #42' in output: %s", result)
 	}
 	if !strings.Contains(result, "Fix the login bug") {
 		t.Errorf("expected title in output: %s", result)
 	}
 	if !strings.Contains(result, "Users cannot log in") {
 		t.Errorf("expected body in output: %s", result)
+	}
+}
+
+func TestRenderPromptDefaultPR(t *testing.T) {
+	item := WorkItem{
+		ID:     "10",
+		Number: 10,
+		Title:  "Add feature",
+		Body:   "This PR adds a feature.",
+		URL:    "https://github.com/o/r/pull/10",
+		Kind:   "PR",
+	}
+
+	result, err := RenderPrompt("", item)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, "PR #10") {
+		t.Errorf("expected 'PR #10' in output: %s", result)
+	}
+}
+
+func TestRenderPromptDefaultKindFallback(t *testing.T) {
+	item := WorkItem{
+		Number: 5,
+		Title:  "Test",
+		Body:   "Body",
+	}
+
+	result, err := RenderPrompt("", item)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(result, "Issue #5") {
+		t.Errorf("expected 'Issue #5' fallback in output: %s", result)
 	}
 }
 
@@ -89,15 +127,16 @@ func TestRenderPromptAllVariables(t *testing.T) {
 		URL:      "U",
 		Labels:   []string{"a", "b"},
 		Comments: "C",
+		Kind:     "PR",
 	}
 
-	tmpl := "{{.ID}} {{.Number}} {{.Title}} {{.Body}} {{.URL}} {{.Labels}} {{.Comments}}"
+	tmpl := "{{.ID}} {{.Number}} {{.Title}} {{.Body}} {{.URL}} {{.Labels}} {{.Comments}} {{.Kind}}"
 	result, err := RenderPrompt(tmpl, item)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := "99 99 T B U a, b C"
+	expected := "99 99 T B U a, b C PR"
 	if result != expected {
 		t.Errorf("expected %q, got %q", expected, result)
 	}

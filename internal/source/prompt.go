@@ -7,7 +7,7 @@ import (
 	"text/template"
 )
 
-const defaultPromptTemplate = `Issue #{{.Number}}: {{.Title}}
+const defaultPromptTemplate = `{{.Kind}} #{{.Number}}: {{.Title}}
 
 {{.Body}}
 {{- if .Comments}}
@@ -29,6 +29,11 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 		return "", fmt.Errorf("parsing prompt template: %w", err)
 	}
 
+	kind := item.Kind
+	if kind == "" {
+		kind = "Issue"
+	}
+
 	data := struct {
 		ID       string
 		Number   int
@@ -37,6 +42,7 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 		URL      string
 		Labels   string
 		Comments string
+		Kind     string
 	}{
 		ID:       item.ID,
 		Number:   item.Number,
@@ -45,6 +51,7 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 		URL:      item.URL,
 		Labels:   strings.Join(item.Labels, ", "),
 		Comments: item.Comments,
+		Kind:     kind,
 	}
 
 	var buf bytes.Buffer
