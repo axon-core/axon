@@ -110,7 +110,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 			Expect(container.Args).To(ConsistOf(
 				"--taskspawner-name="+ts.Name,
 				"--taskspawner-namespace="+ns.Name,
-				"--github-owner=gjkim42",
+				"--github-owner=axon-core",
 				"--github-repo=axon",
 			))
 
