@@ -72,7 +72,7 @@ spec:
     githubIssues:
       workspaceRef:
         name: e2e-spawner-workspace
-      labels: [bug]
+      labels: [kind/bug]
       excludeLabels: [e2e-exclude-placeholder]
       state: open
   taskTemplate:
