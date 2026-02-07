@@ -80,6 +80,9 @@ func printTaskSpawnerDetail(w io.Writer, ts *axonv1alpha1.TaskSpawner) {
 		if gh.WorkspaceRef != nil {
 			printField(w, "Workspace", gh.WorkspaceRef.Name)
 		}
+		if len(gh.Types) > 0 {
+			printField(w, "Types", fmt.Sprintf("%v", gh.Types))
+		}
 		if gh.State != "" {
 			printField(w, "State", gh.State)
 		}

@@ -202,6 +202,7 @@ func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo string) (source.Sourc
 		return &source.GitHubSource{
 			Owner:         owner,
 			Repo:          repo,
+			Types:         gh.Types,
 			Labels:        gh.Labels,
 			ExcludeLabels: gh.ExcludeLabels,
 			State:         gh.State,

@@ -220,7 +220,7 @@ spec:
                   promptTemplate:
                     description: |-
                       PromptTemplate is a Go text/template for rendering the task prompt.
-                      Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}.
+                      Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}.
                     type: string
                   type:
                     description: Type specifies the agent type (e.g., claude-code).
@@ -255,6 +255,14 @@ spec:
                         - closed
                         - all
                         type: string
+                      types:
+                        default:
+                        - issues
+                        description: 'Types specifies which item types to discover:
+                          "issues", "pulls", or both.'
+                        items:
+                          type: string
+                        type: array
                       workspaceRef:
                         description: WorkspaceRef references the Workspace that defines
                           the GitHub repository.

@@ -354,6 +354,165 @@ func TestDiscoverExcludeLabelsNoMatch(t *testing.T) {
 	}
 }
 
+func TestDiscoverTypesIssuesOnly(t *testing.T) {
+	issues := []githubIssue{
+		{Number: 1, Title: "Bug", Body: "Body", HTMLURL: "https://github.com/o/r/issues/1"},
+		{Number: 2, Title: "PR", Body: "Body", HTMLURL: "https://github.com/o/r/pull/2", PullRequest: &struct{}{}},
+		{Number: 3, Title: "Feature", Body: "Body", HTMLURL: "https://github.com/o/r/issues/3"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/owner/repo/issues":
+			json.NewEncoder(w).Encode(issues)
+		case strings.HasPrefix(r.URL.Path, "/repos/owner/repo/issues/") && strings.HasSuffix(r.URL.Path, "/comments"):
+			json.NewEncoder(w).Encode([]githubComment{})
+		}
+	}))
+	defer server.Close()
+
+	s := &GitHubSource{
+		Owner:   "owner",
+		Repo:    "repo",
+		Types:   []string{"issues"},
+		BaseURL: server.URL,
+	}
+
+	items, err := s.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	for _, item := range items {
+		if item.Kind != "Issue" {
+			t.Errorf("expected Kind 'Issue', got %q for item #%d", item.Kind, item.Number)
+		}
+	}
+}
+
+func TestDiscoverTypesPullsOnly(t *testing.T) {
+	issues := []githubIssue{
+		{Number: 1, Title: "Bug", Body: "Body", HTMLURL: "https://github.com/o/r/issues/1"},
+		{Number: 2, Title: "PR 1", Body: "Body", HTMLURL: "https://github.com/o/r/pull/2", PullRequest: &struct{}{}},
+		{Number: 3, Title: "PR 2", Body: "Body", HTMLURL: "https://github.com/o/r/pull/3", PullRequest: &struct{}{}},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/owner/repo/issues":
+			json.NewEncoder(w).Encode(issues)
+		case strings.HasPrefix(r.URL.Path, "/repos/owner/repo/issues/") && strings.HasSuffix(r.URL.Path, "/comments"):
+			json.NewEncoder(w).Encode([]githubComment{})
+		}
+	}))
+	defer server.Close()
+
+	s := &GitHubSource{
+		Owner:   "owner",
+		Repo:    "repo",
+		Types:   []string{"pulls"},
+		BaseURL: server.URL,
+	}
+
+	items, err := s.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	for _, item := range items {
+		if item.Kind != "PR" {
+			t.Errorf("expected Kind 'PR', got %q for item #%d", item.Kind, item.Number)
+		}
+	}
+}
+
+func TestDiscoverTypesBoth(t *testing.T) {
+	issues := []githubIssue{
+		{Number: 1, Title: "Bug", Body: "Body", HTMLURL: "https://github.com/o/r/issues/1"},
+		{Number: 2, Title: "PR", Body: "Body", HTMLURL: "https://github.com/o/r/pull/2", PullRequest: &struct{}{}},
+		{Number: 3, Title: "Feature", Body: "Body", HTMLURL: "https://github.com/o/r/issues/3"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/owner/repo/issues":
+			json.NewEncoder(w).Encode(issues)
+		case strings.HasPrefix(r.URL.Path, "/repos/owner/repo/issues/") && strings.HasSuffix(r.URL.Path, "/comments"):
+			json.NewEncoder(w).Encode([]githubComment{})
+		}
+	}))
+	defer server.Close()
+
+	s := &GitHubSource{
+		Owner:   "owner",
+		Repo:    "repo",
+		Types:   []string{"issues", "pulls"},
+		BaseURL: server.URL,
+	}
+
+	items, err := s.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+
+	kinds := map[string]int{}
+	for _, item := range items {
+		kinds[item.Kind]++
+	}
+	if kinds["Issue"] != 2 {
+		t.Errorf("expected 2 issues, got %d", kinds["Issue"])
+	}
+	if kinds["PR"] != 1 {
+		t.Errorf("expected 1 PR, got %d", kinds["PR"])
+	}
+}
+
+func TestDiscoverTypesDefault(t *testing.T) {
+	issues := []githubIssue{
+		{Number: 1, Title: "Bug", Body: "Body", HTMLURL: "https://github.com/o/r/issues/1"},
+		{Number: 2, Title: "PR", Body: "Body", HTMLURL: "https://github.com/o/r/pull/2", PullRequest: &struct{}{}},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/owner/repo/issues":
+			json.NewEncoder(w).Encode(issues)
+		case strings.HasPrefix(r.URL.Path, "/repos/owner/repo/issues/") && strings.HasSuffix(r.URL.Path, "/comments"):
+			json.NewEncoder(w).Encode([]githubComment{})
+		}
+	}))
+	defer server.Close()
+
+	// No Types set — should default to issues only
+	s := &GitHubSource{
+		Owner:   "owner",
+		Repo:    "repo",
+		BaseURL: server.URL,
+	}
+
+	items, err := s.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item (issues only by default), got %d", len(items))
+	}
+	if items[0].Kind != "Issue" {
+		t.Errorf("expected Kind 'Issue', got %q", items[0].Kind)
+	}
+}
+
 func containsParam(query, param string) bool {
 	return strings.Contains(query, param)
 }

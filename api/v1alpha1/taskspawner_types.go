@@ -32,6 +32,12 @@ type GitHubIssues struct {
 	// +kubebuilder:validation:Required
 	WorkspaceRef *WorkspaceReference `json:"workspaceRef"`
 
+	// Types specifies which item types to discover: "issues", "pulls", or both.
+	// +kubebuilder:validation:Items:Enum=issues;pulls
+	// +kubebuilder:default={"issues"}
+	// +optional
+	Types []string `json:"types,omitempty"`
+
 	// Labels filters issues by labels.
 	// +optional
 	Labels []string `json:"labels,omitempty"`
@@ -62,7 +68,7 @@ type TaskTemplate struct {
 	Model string `json:"model,omitempty"`
 
 	// PromptTemplate is a Go text/template for rendering the task prompt.
-	// Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}.
+	// Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}.
 	// +optional
 	PromptTemplate string `json:"promptTemplate,omitempty"`
 }

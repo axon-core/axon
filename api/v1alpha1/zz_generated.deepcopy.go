@@ -48,6 +48,11 @@ func (in *GitHubIssues) DeepCopyInto(out *GitHubIssues) {
 		*out = new(WorkspaceReference)
 		**out = **in
 	}
+	if in.Types != nil {
+		in, out := &in.Types, &out.Types
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.Labels != nil {
 		in, out := &in.Labels, &out.Labels
 		*out = make([]string, len(*in))
