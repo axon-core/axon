@@ -16,7 +16,8 @@ func NewRootCommand() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Name() == "init" {
+			switch cmd.Name() {
+			case "init", "install", "uninstall":
 				return nil
 			}
 
@@ -43,6 +44,8 @@ func NewRootCommand() *cobra.Command {
 		newLogsCommand(cfg),
 		newDeleteCommand(cfg),
 		newInitCommand(cfg),
+		newInstallCommand(cfg),
+		newUninstallCommand(cfg),
 	)
 
 	return cmd

@@ -48,6 +48,8 @@ test-e2e: ginkgo ## Run e2e tests (requires cluster and CLAUDE_CODE_OAUTH_TOKEN)
 update: controller-gen ## Run all generators and formatters.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:stdout > install-crd.yaml
+	cp install-crd.yaml internal/manifests/install-crd.yaml
+	cp install.yaml internal/manifests/install.yaml
 	go fmt ./...
 	go mod tidy
 
@@ -55,6 +57,8 @@ update: controller-gen ## Run all generators and formatters.
 verify: controller-gen ## Verify everything is up-to-date and correct.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONTROLLER_GEN) crd paths="./..." output:crd:stdout > install-crd.yaml
+	cp install-crd.yaml internal/manifests/install-crd.yaml
+	cp install.yaml internal/manifests/install.yaml
 	go fmt ./...
 	go mod tidy
 	go vet ./...

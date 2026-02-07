@@ -1,0 +1,225 @@
+package cli
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/yaml"
+
+	"github.com/gjkim42/axon/internal/manifests"
+)
+
+const fieldManager = "axon"
+
+func newInstallCommand(cfg *ClientConfig) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "install",
+		Short: "Install axon CRDs and controller into the cluster",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			restConfig, _, err := cfg.resolveConfig()
+			if err != nil {
+				return err
+			}
+
+			dc, err := discovery.NewDiscoveryClientForConfig(restConfig)
+			if err != nil {
+				return fmt.Errorf("creating discovery client: %w", err)
+			}
+			dyn, err := dynamic.NewForConfig(restConfig)
+			if err != nil {
+				return fmt.Errorf("creating dynamic client: %w", err)
+			}
+
+			ctx := cmd.Context()
+
+			fmt.Fprintf(os.Stdout, "Installing axon CRDs\n")
+			if err := applyManifests(ctx, dc, dyn, manifests.InstallCRD); err != nil {
+				return fmt.Errorf("installing CRDs: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Installing axon controller\n")
+			if err := applyManifests(ctx, dc, dyn, manifests.InstallController); err != nil {
+				return fmt.Errorf("installing controller: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Axon installed successfully\n")
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func newUninstallCommand(cfg *ClientConfig) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Uninstall axon controller and CRDs from the cluster",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			restConfig, _, err := cfg.resolveConfig()
+			if err != nil {
+				return err
+			}
+
+			dc, err := discovery.NewDiscoveryClientForConfig(restConfig)
+			if err != nil {
+				return fmt.Errorf("creating discovery client: %w", err)
+			}
+			dyn, err := dynamic.NewForConfig(restConfig)
+			if err != nil {
+				return fmt.Errorf("creating dynamic client: %w", err)
+			}
+
+			ctx := cmd.Context()
+
+			fmt.Fprintf(os.Stdout, "Removing axon controller\n")
+			if err := deleteManifests(ctx, dc, dyn, manifests.InstallController); err != nil {
+				return fmt.Errorf("removing controller: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Removing axon CRDs\n")
+			if err := deleteManifests(ctx, dc, dyn, manifests.InstallCRD); err != nil {
+				return fmt.Errorf("removing CRDs: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Axon uninstalled successfully\n")
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// parseManifests splits a multi-document YAML byte slice into individual
+// unstructured objects, skipping empty documents.
+func parseManifests(data []byte) ([]*unstructured.Unstructured, error) {
+	var objs []*unstructured.Unstructured
+	reader := yamlutil.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
+	for {
+		doc, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("reading YAML document: %w", err)
+		}
+		doc = bytes.TrimSpace(doc)
+		if len(doc) == 0 {
+			continue
+		}
+
+		obj := &unstructured.Unstructured{}
+		if err := yaml.Unmarshal(doc, &obj.Object); err != nil {
+			return nil, fmt.Errorf("unmarshaling manifest: %w", err)
+		}
+		if obj.Object == nil {
+			continue
+		}
+		objs = append(objs, obj)
+	}
+	return objs, nil
+}
+
+// newRESTMapper creates a REST mapper using the discovery client to resolve
+// API group resources. This should be called once and the mapper reused
+// across multiple objects to avoid redundant API server calls.
+func newRESTMapper(dc discovery.DiscoveryInterface) (meta.RESTMapper, error) {
+	gr, err := restmapper.GetAPIGroupResources(dc)
+	if err != nil {
+		return nil, fmt.Errorf("discovering API resources: %w", err)
+	}
+	return restmapper.NewDiscoveryRESTMapper(gr), nil
+}
+
+// resourceClient returns a dynamic resource client for the given object,
+// using the provided REST mapper to resolve the GVR and determine whether
+// the resource is namespaced.
+func resourceClient(mapper meta.RESTMapper, dyn dynamic.Interface, obj *unstructured.Unstructured) (dynamic.ResourceInterface, error) {
+	gvk := obj.GroupVersionKind()
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return nil, fmt.Errorf("mapping resource for %s: %w", gvk, err)
+	}
+
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		return dyn.Resource(mapping.Resource).Namespace(obj.GetNamespace()), nil
+	}
+	return dyn.Resource(mapping.Resource), nil
+}
+
+// applyManifests parses multi-document YAML and applies each object using
+// server-side apply.
+func applyManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte) error {
+	objs, err := parseManifests(data)
+	if err != nil {
+		return err
+	}
+	mapper, err := newRESTMapper(dc)
+	if err != nil {
+		return err
+	}
+	for _, obj := range objs {
+		rc, err := resourceClient(mapper, dyn, obj)
+		if err != nil {
+			return err
+		}
+		objData, err := yaml.Marshal(obj.Object)
+		if err != nil {
+			return fmt.Errorf("marshaling %s %s: %w", obj.GetKind(), obj.GetName(), err)
+		}
+		if _, err := rc.Patch(ctx, obj.GetName(), types.ApplyPatchType, objData, metav1.PatchOptions{
+			FieldManager: fieldManager,
+			Force:        ptr.To(true),
+		}); err != nil {
+			return fmt.Errorf("applying %s %s: %w", obj.GetKind(), obj.GetName(), err)
+		}
+	}
+	return nil
+}
+
+// deleteManifests parses multi-document YAML and deletes each object,
+// ignoring not-found errors for idempotent uninstalls.
+func deleteManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte) error {
+	objs, err := parseManifests(data)
+	if err != nil {
+		return err
+	}
+	mapper, err := newRESTMapper(dc)
+	if err != nil {
+		return err
+	}
+	for _, obj := range objs {
+		rc, err := resourceClient(mapper, dyn, obj)
+		if err != nil {
+			// If the resource type is not found (e.g. CRDs already deleted),
+			// skip it for idempotent uninstalls.
+			if meta.IsNoMatchError(err) {
+				continue
+			}
+			return err
+		}
+		if err := rc.Delete(ctx, obj.GetName(), metav1.DeleteOptions{}); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("deleting %s %s: %w", obj.GetKind(), obj.GetName(), err)
+		}
+	}
+	return nil
+}
