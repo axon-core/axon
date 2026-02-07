@@ -28,12 +28,18 @@ func newGetCommand(cfg *ClientConfig) *cobra.Command {
 }
 
 func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
+	var output string
+
 	cmd := &cobra.Command{
 		Use:     "taskspawner [name]",
 		Aliases: []string{"taskspawners", "ts"},
 		Short:   "List task spawners or get details of a specific task spawner",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if output != "" && output != "yaml" && output != "json" {
+				return fmt.Errorf("unknown output format %q: must be one of yaml, json", output)
+			}
+
 			cl, ns, err := cfg.NewClient()
 			if err != nil {
 				return err
@@ -46,20 +52,41 @@ func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 				if err := cl.Get(ctx, client.ObjectKey{Name: args[0], Namespace: ns}, ts); err != nil {
 					return fmt.Errorf("getting task spawner: %w", err)
 				}
-				printTaskSpawnerDetail(os.Stdout, ts)
-				return nil
+
+				ts.SetGroupVersionKind(axonv1alpha1.GroupVersion.WithKind("TaskSpawner"))
+				switch output {
+				case "yaml":
+					return printYAML(os.Stdout, ts)
+				case "json":
+					return printJSON(os.Stdout, ts)
+				default:
+					printTaskSpawnerDetail(os.Stdout, ts)
+					return nil
+				}
 			}
 
 			tsList := &axonv1alpha1.TaskSpawnerList{}
 			if err := cl.List(ctx, tsList, client.InNamespace(ns)); err != nil {
 				return fmt.Errorf("listing task spawners: %w", err)
 			}
-			printTaskSpawnerTable(os.Stdout, tsList.Items)
-			return nil
+
+			tsList.SetGroupVersionKind(axonv1alpha1.GroupVersion.WithKind("TaskSpawnerList"))
+			switch output {
+			case "yaml":
+				return printYAML(os.Stdout, tsList)
+			case "json":
+				return printJSON(os.Stdout, tsList)
+			default:
+				printTaskSpawnerTable(os.Stdout, tsList.Items)
+				return nil
+			}
 		},
 	}
 
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format (yaml or json)")
+
 	cmd.ValidArgsFunction = completeTaskSpawnerNames(cfg)
+	_ = cmd.RegisterFlagCompletionFunc("output", cobra.FixedCompletions([]string{"yaml", "json"}, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }
