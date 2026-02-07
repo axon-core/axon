@@ -20,7 +20,10 @@ type Config struct {
 }
 
 // WorkspaceConfig holds workspace-related configuration.
+// If Name is set, it references an existing Workspace CR.
+// If Repo is set, the CLI auto-creates a Workspace CR.
 type WorkspaceConfig struct {
+	Name  string `json:"name,omitempty"`
 	Repo  string `json:"repo,omitempty"`
 	Ref   string `json:"ref,omitempty"`
 	Token string `json:"token,omitempty"`

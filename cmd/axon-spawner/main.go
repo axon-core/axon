@@ -32,9 +32,13 @@ func init() {
 func main() {
 	var name string
 	var namespace string
+	var githubOwner string
+	var githubRepo string
 
 	flag.StringVar(&name, "taskspawner-name", "", "Name of the TaskSpawner to manage")
 	flag.StringVar(&namespace, "taskspawner-namespace", "", "Namespace of the TaskSpawner")
+	flag.StringVar(&githubOwner, "github-owner", "", "GitHub repository owner")
+	flag.StringVar(&githubRepo, "github-repo", "", "GitHub repository name")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -67,7 +71,7 @@ func main() {
 	log.Info("starting spawner", "taskspawner", key)
 
 	for {
-		if err := runCycle(ctx, cl, key); err != nil {
+		if err := runCycle(ctx, cl, key, githubOwner, githubRepo); err != nil {
 			log.Error(err, "discovery cycle failed")
 		}
 
@@ -87,7 +91,7 @@ func main() {
 	}
 }
 
-func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName) error {
+func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName, githubOwner, githubRepo string) error {
 	log := ctrl.Log.WithName("spawner")
 
 	var ts axonv1alpha1.TaskSpawner
@@ -95,7 +99,7 @@ func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName) e
 		return fmt.Errorf("fetching TaskSpawner: %w", err)
 	}
 
-	src, err := buildSource(&ts)
+	src, err := buildSource(&ts, githubOwner, githubRepo)
 	if err != nil {
 		return fmt.Errorf("building source: %w", err)
 	}
@@ -153,8 +157,11 @@ func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName) e
 				Prompt:      prompt,
 				Credentials: ts.Spec.TaskTemplate.Credentials,
 				Model:       ts.Spec.TaskTemplate.Model,
-				Workspace:   ts.Spec.TaskTemplate.Workspace,
 			},
+		}
+
+		if gh := ts.Spec.When.GitHubIssues; gh != nil && gh.WorkspaceRef != nil {
+			task.Spec.WorkspaceRef = gh.WorkspaceRef
 		}
 
 		if err := cl.Create(ctx, task); err != nil {
@@ -189,12 +196,12 @@ func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName) e
 	return nil
 }
 
-func buildSource(ts *axonv1alpha1.TaskSpawner) (source.Source, error) {
+func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo string) (source.Source, error) {
 	if ts.Spec.When.GitHubIssues != nil {
 		gh := ts.Spec.When.GitHubIssues
 		return &source.GitHubSource{
-			Owner:  gh.Owner,
-			Repo:   gh.Repo,
+			Owner:  owner,
+			Repo:   repo,
 			Labels: gh.Labels,
 			State:  gh.State,
 			Token:  os.Getenv("GITHUB_TOKEN"),

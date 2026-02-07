@@ -72,6 +72,15 @@ rules:
       - taskspawners/finalizers
     verbs:
       - update
+  # Workspaces
+  - apiGroups:
+      - axon.io
+    resources:
+      - workspaces
+    verbs:
+      - get
+      - list
+      - watch
   # Jobs
   - apiGroups:
       - batch
