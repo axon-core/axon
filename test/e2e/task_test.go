@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"strings"
@@ -87,6 +88,9 @@ spec:
 		By("getting Job logs")
 		logs := kubectlOutput("logs", "job/"+taskName)
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
+
+		By("verifying task result is not an error")
+		verifyTaskResult(logs)
 	})
 })
 
@@ -151,6 +155,9 @@ spec:
 		By("getting Job logs")
 		logs := kubectlOutput("logs", "job/"+workspaceTaskName)
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
+
+		By("verifying task result is not an error")
+		verifyTaskResult(logs)
 
 		By("verifying no permission errors in logs")
 		Expect(logs).NotTo(ContainSubstring("permission denied"))
@@ -232,6 +239,9 @@ spec:
 		By("getting Job logs")
 		logs := kubectlOutput("logs", "job/"+githubTaskName)
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
+
+		By("verifying task result is not an error")
+		verifyTaskResult(logs)
 	})
 })
 
@@ -260,4 +270,35 @@ func kubectlOutput(args ...string) string {
 	err := cmd.Run()
 	Expect(err).NotTo(HaveOccurred())
 	return strings.TrimSpace(out.String())
+}
+
+// resultEvent is used to parse the result event from claude-code stream-json output.
+type resultEvent struct {
+	Type    string `json:"type"`
+	IsError bool   `json:"is_error"`
+	Result  string `json:"result"`
+}
+
+// verifyTaskResult parses raw NDJSON logs from claude-code and verifies that
+// the result event does not indicate an error. Claude Code exits with code 0
+// even when the task fails, so checking the Job/Task status alone is not
+// sufficient to detect actual task failures.
+func verifyTaskResult(logs string) {
+	var found bool
+	for _, line := range strings.Split(logs, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var event resultEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			continue
+		}
+		if event.Type == "result" {
+			found = true
+			Expect(event.IsError).To(BeFalse(), "Task result indicates error: %s", event.Result)
+			break
+		}
+	}
+	Expect(found).To(BeTrue(), "No result event found in task logs")
 }

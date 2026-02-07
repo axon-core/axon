@@ -78,6 +78,11 @@ var _ = Describe("CLI", func() {
 		logs := axonOutput("logs", cliTaskName)
 		Expect(logs).NotTo(BeEmpty())
 
+		By("verifying task result is not an error")
+		rawLogs := kubectlOutput("logs", "job/"+cliTaskName)
+		GinkgoWriter.Printf("Raw job logs:\n%s\n", rawLogs)
+		verifyTaskResult(rawLogs)
+
 		By("deleting task via CLI")
 		axon("delete", "task", cliTaskName)
 
@@ -102,8 +107,8 @@ var _ = Describe("CLI", func() {
 		stdout, stderr := axonOutputWithStderr("logs", cliFollowTaskName, "-f")
 		By("verifying stderr contains streaming status")
 		Expect(stderr).To(ContainSubstring("Streaming container (claude-code) logs..."))
-		By("verifying stderr contains result summary")
-		Expect(stderr).To(ContainSubstring("[result]"))
+		By("verifying stderr contains successful result summary")
+		Expect(stderr).To(ContainSubstring("[result] completed"))
 		By("verifying stdout contains log output")
 		Expect(stdout).NotTo(BeEmpty())
 	})
@@ -137,6 +142,11 @@ var _ = Describe("CLI", func() {
 		By("verifying task logs via CLI")
 		logs := axonOutput("logs", cliWorkspaceTaskName)
 		Expect(logs).NotTo(BeEmpty())
+
+		By("verifying task result is not an error")
+		rawLogs := kubectlOutput("logs", "job/"+cliWorkspaceTaskName)
+		GinkgoWriter.Printf("Raw job logs:\n%s\n", rawLogs)
+		verifyTaskResult(rawLogs)
 
 		By("deleting task via CLI")
 		axon("delete", "task", cliWorkspaceTaskName)
