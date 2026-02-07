@@ -30,6 +30,18 @@ const (
 	// container image (claude-code/Dockerfile). This must be kept in sync
 	// with the Dockerfile.
 	ClaudeCodeUID = int64(1100)
+
+	// AgentEntrypoint is the standard entrypoint for axon-compatible agent
+	// images. Custom agent images must provide this script and accept the
+	// prompt as the first argument.
+	AgentEntrypoint = "/axon_entrypoint.sh"
+
+	// EnvAxonPrompt is the reserved environment variable name for the task
+	// prompt.
+	EnvAxonPrompt = "AXON_PROMPT"
+
+	// EnvAxonModel is the reserved environment variable name for the model.
+	EnvAxonModel = "AXON_MODEL"
 )
 
 // JobBuilder constructs Kubernetes Jobs for Tasks.
@@ -55,18 +67,20 @@ func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.Work
 
 // buildClaudeCodeJob creates a Job for Claude Code agent.
 func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec) (*batchv1.Job, error) {
-	args := []string{
-		"--dangerously-skip-permissions",
-		"--output-format", "stream-json",
-		"--verbose",
-		"-p", task.Spec.Prompt,
+	image := b.ClaudeCodeImage
+	if task.Spec.Image != "" {
+		image = task.Spec.Image
 	}
 
-	if task.Spec.Model != "" {
-		args = append(args, "--model", task.Spec.Model)
-	}
+	// Use the standard axon agent entrypoint with prompt as argument.
+	command := []string{AgentEntrypoint}
+	args := []string{task.Spec.Prompt}
 
-	var envVars []corev1.EnvVar
+	// Reserved environment variables set for all agent images.
+	envVars := []corev1.EnvVar{
+		{Name: EnvAxonPrompt, Value: task.Spec.Prompt},
+		{Name: EnvAxonModel, Value: task.Spec.Model},
+	}
 
 	switch task.Spec.Credentials.Type {
 	case axonv1alpha1.CredentialTypeAPIKey:
@@ -120,8 +134,9 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 
 	mainContainer := corev1.Container{
 		Name:            "claude-code",
-		Image:           b.ClaudeCodeImage,
+		Image:           image,
 		ImagePullPolicy: b.ClaudeCodeImagePullPolicy,
+		Command:         command,
 		Args:            args,
 		Env:             envVars,
 	}

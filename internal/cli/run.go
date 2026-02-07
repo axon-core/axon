@@ -20,6 +20,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	var (
 		prompt         string
 		agentType      string
+		image          string
 		secret         string
 		credentialType string
 		model          string
@@ -126,6 +127,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				},
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   agentType,
+					Image:  image,
 					Prompt: prompt,
 					Credentials: axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialType(credentialType),
@@ -158,6 +160,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "task prompt (required)")
 	cmd.Flags().StringVarP(&agentType, "type", "t", "claude-code", "agent type")
+	cmd.Flags().StringVar(&image, "image", "", "custom agent image (overrides default image for the agent type)")
 	cmd.Flags().StringVar(&secret, "secret", "", "secret name with credentials (overrides oauthToken/apiKey in config)")
 	cmd.Flags().StringVar(&credentialType, "credential-type", "api-key", "credential type (api-key or oauth)")
 	cmd.Flags().StringVar(&model, "model", "", "model override")

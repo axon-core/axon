@@ -59,6 +59,14 @@ type TaskTemplate struct {
 	// +kubebuilder:validation:Required
 	Type string `json:"type"`
 
+	// Image optionally overrides the default container image for the agent type.
+	// The image must implement the axon agent image interface:
+	// - Provide /axon_entrypoint.sh as the entrypoint
+	// - Accept the prompt as the first argument
+	// - Use AXON_PROMPT and AXON_MODEL environment variables
+	// +optional
+	Image string `json:"image,omitempty"`
+
 	// Credentials specifies how to authenticate with the agent.
 	// +kubebuilder:validation:Required
 	Credentials Credentials `json:"credentials"`

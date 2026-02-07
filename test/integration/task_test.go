@@ -101,18 +101,17 @@ var _ = Describe("Task Controller", func() {
 			Expect(createdJob.Spec.Template.Spec.Containers).To(HaveLen(1))
 			container := createdJob.Spec.Template.Spec.Containers[0]
 			Expect(container.Name).To(Equal("claude-code"))
-			Expect(container.Args).To(ContainElements(
-				"--dangerously-skip-permissions",
-				"--output-format", "stream-json",
-				"--verbose",
-				"-p", "Create a hello world program",
-				"--model", "claude-sonnet-4-20250514",
-			))
+			Expect(container.Command).To(Equal([]string{controller.AgentEntrypoint}))
+			Expect(container.Args).To(Equal([]string{"Create a hello world program"}))
 
-			By("Verifying the Job has API key env var")
-			Expect(container.Env).To(HaveLen(1))
-			Expect(container.Env[0].Name).To(Equal("ANTHROPIC_API_KEY"))
-			Expect(container.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
+			By("Verifying the Job has reserved env vars and API key env var")
+			Expect(container.Env).To(HaveLen(3))
+			Expect(container.Env[0].Name).To(Equal(controller.EnvAxonPrompt))
+			Expect(container.Env[0].Value).To(Equal("Create a hello world program"))
+			Expect(container.Env[1].Name).To(Equal(controller.EnvAxonModel))
+			Expect(container.Env[1].Value).To(Equal("claude-sonnet-4-20250514"))
+			Expect(container.Env[2].Name).To(Equal("ANTHROPIC_API_KEY"))
+			Expect(container.Env[2].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
 
 			By("Verifying the Job has owner reference")
 			Expect(createdJob.OwnerReferences).To(HaveLen(1))
@@ -232,12 +231,16 @@ var _ = Describe("Task Controller", func() {
 			By("Logging the Job spec")
 			logJobSpec(createdJob)
 
-			By("Verifying the Job has OAuth token env var")
+			By("Verifying the Job has reserved env vars and OAuth token env var")
 			container := createdJob.Spec.Template.Spec.Containers[0]
-			Expect(container.Env).To(HaveLen(1))
-			Expect(container.Env[0].Name).To(Equal("CLAUDE_CODE_OAUTH_TOKEN"))
-			Expect(container.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("claude-oauth"))
-			Expect(container.Env[0].ValueFrom.SecretKeyRef.Key).To(Equal("CLAUDE_CODE_OAUTH_TOKEN"))
+			Expect(container.Env).To(HaveLen(3))
+			Expect(container.Env[0].Name).To(Equal(controller.EnvAxonPrompt))
+			Expect(container.Env[0].Value).To(Equal("Create a hello world program"))
+			Expect(container.Env[1].Name).To(Equal(controller.EnvAxonModel))
+			Expect(container.Env[1].Value).To(Equal(""))
+			Expect(container.Env[2].Name).To(Equal("CLAUDE_CODE_OAUTH_TOKEN"))
+			Expect(container.Env[2].ValueFrom.SecretKeyRef.Name).To(Equal("claude-oauth"))
+			Expect(container.Env[2].ValueFrom.SecretKeyRef.Key).To(Equal("CLAUDE_CODE_OAUTH_TOKEN"))
 		})
 	})
 
@@ -433,17 +436,20 @@ var _ = Describe("Task Controller", func() {
 			By("Logging the Job spec")
 			logJobSpec(createdJob)
 
-			By("Verifying the main container has ANTHROPIC_API_KEY, GITHUB_TOKEN, and GH_TOKEN env vars")
+			By("Verifying the main container has reserved env vars, ANTHROPIC_API_KEY, GITHUB_TOKEN, and GH_TOKEN env vars")
 			mainContainer := createdJob.Spec.Template.Spec.Containers[0]
-			Expect(mainContainer.Env).To(HaveLen(3))
-			Expect(mainContainer.Env[0].Name).To(Equal("ANTHROPIC_API_KEY"))
-			Expect(mainContainer.Env[0].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
-			Expect(mainContainer.Env[1].Name).To(Equal("GITHUB_TOKEN"))
-			Expect(mainContainer.Env[1].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
-			Expect(mainContainer.Env[1].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
-			Expect(mainContainer.Env[2].Name).To(Equal("GH_TOKEN"))
-			Expect(mainContainer.Env[2].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
-			Expect(mainContainer.Env[2].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
+			Expect(mainContainer.Env).To(HaveLen(5))
+			Expect(mainContainer.Env[0].Name).To(Equal(controller.EnvAxonPrompt))
+			Expect(mainContainer.Env[0].Value).To(Equal("Create a PR"))
+			Expect(mainContainer.Env[1].Name).To(Equal(controller.EnvAxonModel))
+			Expect(mainContainer.Env[2].Name).To(Equal("ANTHROPIC_API_KEY"))
+			Expect(mainContainer.Env[2].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
+			Expect(mainContainer.Env[3].Name).To(Equal("GITHUB_TOKEN"))
+			Expect(mainContainer.Env[3].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
+			Expect(mainContainer.Env[3].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
+			Expect(mainContainer.Env[4].Name).To(Equal("GH_TOKEN"))
+			Expect(mainContainer.Env[4].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
+			Expect(mainContainer.Env[4].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
 
 			By("Verifying the init container has GITHUB_TOKEN, GH_TOKEN env vars and credential helper")
 			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
@@ -783,6 +789,77 @@ var _ = Describe("Task Controller", func() {
 			Consistently(func() error {
 				return k8sClient.Get(ctx, taskLookupKey, createdTask)
 			}, 3*time.Second, interval).Should(Succeed())
+		})
+	})
+
+	Context("When creating a Task with a custom image", func() {
+		It("Should create a Job with the custom image and axon entrypoint", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-custom-image",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Task with custom image")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-custom-image",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Image:  "my-custom-agent:v1",
+					Prompt: "Run custom agent task",
+					Credentials: axonv1alpha1.Credentials{
+						Type: axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{
+							Name: "anthropic-api-key",
+						},
+					},
+					Model: "custom-model",
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the custom image is used")
+			container := createdJob.Spec.Template.Spec.Containers[0]
+			Expect(container.Image).To(Equal("my-custom-agent:v1"))
+
+			By("Verifying the axon entrypoint is used")
+			Expect(container.Command).To(Equal([]string{controller.AgentEntrypoint}))
+			Expect(container.Args).To(Equal([]string{"Run custom agent task"}))
+
+			By("Verifying reserved environment variables are set")
+			Expect(container.Env[0].Name).To(Equal(controller.EnvAxonPrompt))
+			Expect(container.Env[0].Value).To(Equal("Run custom agent task"))
+			Expect(container.Env[1].Name).To(Equal(controller.EnvAxonModel))
+			Expect(container.Env[1].Value).To(Equal("custom-model"))
 		})
 	})
 

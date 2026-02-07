@@ -20,7 +20,9 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN useradd -u 1100 -m -s /bin/bash claude
 RUN mkdir -p /home/claude/.claude && chown -R claude:claude /home/claude
 
+COPY --chmod=755 claude-code/axon_entrypoint.sh /axon_entrypoint.sh
+
 USER claude
 WORKDIR /workspace
 
-ENTRYPOINT ["claude"]
+ENTRYPOINT ["/axon_entrypoint.sh"]
