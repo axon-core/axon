@@ -96,12 +96,13 @@ func (r *TaskSpawnerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Update status with deployment name if not set
 	if ts.Status.DeploymentName != deploy.Name {
+		patch := client.MergeFrom(ts.DeepCopy())
 		ts.Status.DeploymentName = deploy.Name
 		if ts.Status.Phase == "" {
 			ts.Status.Phase = axonv1alpha1.TaskSpawnerPhasePending
 		}
-		if err := r.Status().Update(ctx, &ts); err != nil {
-			logger.Error(err, "unable to update TaskSpawner status")
+		if err := r.Status().Patch(ctx, &ts, patch); err != nil {
+			logger.Error(err, "Unable to patch TaskSpawner status")
 			return ctrl.Result{}, err
 		}
 	}
@@ -149,10 +150,11 @@ func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1
 	logger.Info("created Deployment", "deployment", deploy.Name)
 
 	// Update status
+	patch := client.MergeFrom(ts.DeepCopy())
 	ts.Status.Phase = axonv1alpha1.TaskSpawnerPhasePending
 	ts.Status.DeploymentName = deploy.Name
-	if err := r.Status().Update(ctx, ts); err != nil {
-		logger.Error(err, "unable to update TaskSpawner status")
+	if err := r.Status().Patch(ctx, ts, patch); err != nil {
+		logger.Error(err, "Unable to patch TaskSpawner status")
 		return ctrl.Result{}, err
 	}
 

@@ -118,10 +118,11 @@ func (r *TaskReconciler) createJob(ctx context.Context, task *axonv1alpha1.Task)
 	job, err := r.JobBuilder.Build(task)
 	if err != nil {
 		logger.Error(err, "unable to build Job")
+		patch := client.MergeFrom(task.DeepCopy())
 		task.Status.Phase = axonv1alpha1.TaskPhaseFailed
 		task.Status.Message = fmt.Sprintf("Failed to build Job: %v", err)
-		if updateErr := r.Status().Update(ctx, task); updateErr != nil {
-			logger.Error(updateErr, "unable to update Task status")
+		if updateErr := r.Status().Patch(ctx, task, patch); updateErr != nil {
+			logger.Error(updateErr, "Unable to patch Task status")
 		}
 		return ctrl.Result{}, err
 	}
@@ -143,10 +144,11 @@ func (r *TaskReconciler) createJob(ctx context.Context, task *axonv1alpha1.Task)
 	logger.Info("created Job", "job", job.Name)
 
 	// Update status
+	patch := client.MergeFrom(task.DeepCopy())
 	task.Status.Phase = axonv1alpha1.TaskPhasePending
 	task.Status.JobName = job.Name
-	if err := r.Status().Update(ctx, task); err != nil {
-		logger.Error(err, "unable to update Task status")
+	if err := r.Status().Patch(ctx, task, patch); err != nil {
+		logger.Error(err, "Unable to patch Task status")
 		return ctrl.Result{}, err
 	}
 
@@ -156,6 +158,8 @@ func (r *TaskReconciler) createJob(ctx context.Context, task *axonv1alpha1.Task)
 // updateStatus updates Task status based on Job status.
 func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Task, job *batchv1.Job) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+
+	patch := client.MergeFrom(task.DeepCopy())
 
 	// Find pod name
 	if task.Status.PodName == "" {
@@ -196,8 +200,8 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 	}
 
 	if statusChanged {
-		if err := r.Status().Update(ctx, task); err != nil {
-			logger.Error(err, "unable to update Task status")
+		if err := r.Status().Patch(ctx, task, patch); err != nil {
+			logger.Error(err, "Unable to patch Task status")
 			return ctrl.Result{}, err
 		}
 	}

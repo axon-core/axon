@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -249,6 +250,76 @@ var _ = Describe("TaskSpawner Controller", func() {
 				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
 				return err != nil
 			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("When the TaskSpawner is modified concurrently", func() {
+		It("Should still update status without conflict errors", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-conflict",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-spawner-conflict",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							Owner: "gjkim42",
+							Repo:  "axon",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+
+			By("Waiting for the Deployment to be created")
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Concurrently modifying the TaskSpawner metadata to bump resourceVersion")
+			for i := 0; i < 5; i++ {
+				updated := &axonv1alpha1.TaskSpawner{}
+				Expect(k8sClient.Get(ctx, tsLookupKey, updated)).Should(Succeed())
+				if updated.Annotations == nil {
+					updated.Annotations = map[string]string{}
+				}
+				updated.Annotations["conflict-test"] = fmt.Sprintf("iteration-%d", i)
+				Expect(k8sClient.Update(ctx, updated)).Should(Succeed())
+			}
+
+			By("Verifying the status is eventually updated despite concurrent modifications")
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() string {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.DeploymentName
+			}, timeout, interval).Should(Equal(ts.Name))
+			Expect(createdTS.Status.Phase).To(Equal(axonv1alpha1.TaskSpawnerPhasePending))
 		})
 	})
 
