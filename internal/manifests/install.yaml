@@ -1,0 +1,302 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: axon-system
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/component: manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: axon-controller
+  namespace: axon-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: axon-controller-role
+rules:
+  # Tasks
+  - apiGroups:
+      - axon.io
+    resources:
+      - tasks
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - axon.io
+    resources:
+      - tasks/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - axon.io
+    resources:
+      - tasks/finalizers
+    verbs:
+      - update
+  # TaskSpawners
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/finalizers
+    verbs:
+      - update
+  # Workspaces
+  - apiGroups:
+      - axon.io
+    resources:
+      - workspaces
+    verbs:
+      - get
+      - list
+      - watch
+  # Jobs
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Deployments
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Pods (for status)
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  # Secrets (for token mounting)
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  # ServiceAccounts (for spawner RBAC setup)
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+  # RoleBindings (for spawner RBAC setup)
+  - apiGroups:
+      - rbac.authorization.k8s.io
+    resources:
+      - rolebindings
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: axon-spawner-role
+rules:
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - axon.io
+    resources:
+      - taskspawners/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - axon.io
+    resources:
+      - tasks
+    verbs:
+      - create
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: axon-controller-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: axon-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: axon-controller
+    namespace: axon-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: axon-leader-election-role
+  namespace: axon-system
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: axon-leader-election-rolebinding
+  namespace: axon-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: axon-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: axon-controller
+    namespace: axon-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axon-controller-manager
+  namespace: axon-system
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/component: manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: axon
+      app.kubernetes.io/component: manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: axon
+        app.kubernetes.io/component: manager
+    spec:
+      serviceAccountName: axon-controller
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: manager
+          image: gjkim42/axon-controller:latest
+          args:
+            - --leader-elect
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi

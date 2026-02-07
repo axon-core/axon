@@ -92,17 +92,16 @@ flowchart LR
 - Kubernetes cluster (1.28+)
 - kubectl configured
 
-### 1. Install Axon
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/gjkim42/axon/main/install-crd.yaml
-kubectl apply -f https://raw.githubusercontent.com/gjkim42/axon/main/install.yaml
-```
-
-### 2. Install the CLI
+### 1. Install the CLI
 
 ```bash
 go install github.com/gjkim42/axon/cmd/axon@latest
+```
+
+### 2. Install Axon
+
+```bash
+axon install
 ```
 
 ### 3. Run Your First Task
@@ -263,7 +262,7 @@ The key pattern here is `excludeLabels: [axon/needs-input]` — this creates a f
 | Git Workspace | Clone a repo into the agent's working directory via a Workspace resource, with optional `GITHUB_TOKEN` for private repos and PR creation |
 | Config File | Set token, model, namespace, and workspace in `~/.axon/config.yaml` — secrets are auto-created |
 | TaskSpawner | Automatically create Tasks from GitHub Issues (or other sources) via a long-running spawner |
-| CLI | `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage tasks without writing YAML |
+| CLI | `axon install`, `axon uninstall`, `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage the full lifecycle without writing YAML |
 | Full Lifecycle | `Pending` → `Running` → `Succeeded` / `Failed` |
 | Owner References | Delete a Task and its Job + Pod are automatically cleaned up |
 | Credential Management | API key and OAuth supported via Kubernetes Secrets |
@@ -404,9 +403,12 @@ If both `name` and `repo` are set, `name` takes precedence. The `--workspace` CL
 <details>
 <summary><strong>CLI</strong></summary>
 
-The `axon` CLI lets you manage tasks without writing YAML.
+The `axon` CLI lets you manage the full lifecycle without writing YAML.
 
 ```bash
+# Install axon into a cluster
+axon install
+
 # Initialize a config file
 axon init
 
@@ -430,6 +432,9 @@ axon logs my-task -f
 
 # Delete a task
 axon delete my-task
+
+# Uninstall axon from the cluster
+axon uninstall
 ```
 
 </details>
@@ -437,8 +442,7 @@ axon delete my-task
 ## Uninstall
 
 ```bash
-kubectl delete -f https://raw.githubusercontent.com/gjkim42/axon/main/install.yaml
-kubectl delete -f https://raw.githubusercontent.com/gjkim42/axon/main/install-crd.yaml
+axon uninstall
 ```
 
 ## Development
