@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -30,6 +31,19 @@ const (
 	// container image (claude-code/Dockerfile). This must be kept in sync
 	// with the Dockerfile.
 	ClaudeCodeUID = int64(1100)
+
+	// MCPConfigVolumeName is the name of the volume used to mount the MCP
+	// configuration file.
+	MCPConfigVolumeName = "mcp-config"
+
+	// MCPConfigMountPath is the mount path for the MCP configuration volume.
+	MCPConfigMountPath = "/home/claude/.mcp"
+
+	// MCPConfigFileName is the filename for the MCP configuration.
+	MCPConfigFileName = "mcp.json"
+
+	// MCPConfigInitImage is the image used for the MCP config init container.
+	MCPConfigInitImage = "busybox:1.37"
 )
 
 // JobBuilder constructs Kubernetes Jobs for Tasks.
@@ -130,6 +144,47 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 	var volumes []corev1.Volume
 	var podSecurityContext *corev1.PodSecurityContext
 
+	if len(task.Spec.MCPServers) > 0 {
+		mcpConfig, err := buildMCPConfig(task.Spec.MCPServers)
+		if err != nil {
+			return nil, fmt.Errorf("building MCP config: %w", err)
+		}
+
+		mcpConfigPath := MCPConfigMountPath + "/" + MCPConfigFileName
+		mainContainer.Args = append(mainContainer.Args, "--mcp-config", mcpConfigPath)
+
+		volumes = append(volumes, corev1.Volume{
+			Name: MCPConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+
+		mainContainer.VolumeMounts = append(mainContainer.VolumeMounts, corev1.VolumeMount{
+			Name:      MCPConfigVolumeName,
+			MountPath: MCPConfigMountPath,
+			ReadOnly:  true,
+		})
+
+		mcpUID := ClaudeCodeUID
+		initContainers = append(initContainers, corev1.Container{
+			Name:    "mcp-config",
+			Image:   MCPConfigInitImage,
+			Command: []string{"sh", "-c", fmt.Sprintf("printf '%%s' \"$MCP_CONFIG\" > %s", mcpConfigPath)},
+			Env: []corev1.EnvVar{{
+				Name:  "MCP_CONFIG",
+				Value: mcpConfig,
+			}},
+			VolumeMounts: []corev1.VolumeMount{{
+				Name:      MCPConfigVolumeName,
+				MountPath: MCPConfigMountPath,
+			}},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser: &mcpUID,
+			},
+		})
+	}
+
 	if workspace != nil {
 		podSecurityContext = &corev1.PodSecurityContext{
 			FSGroup: &claudeCodeUID,
@@ -174,7 +229,7 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 
 		initContainers = append(initContainers, initContainer)
 
-		mainContainer.VolumeMounts = []corev1.VolumeMount{volumeMount}
+		mainContainer.VolumeMounts = append(mainContainer.VolumeMounts, volumeMount)
 		mainContainer.WorkingDir = WorkspaceMountPath + "/repo"
 	}
 
@@ -212,4 +267,52 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 	}
 
 	return job, nil
+}
+
+// mcpConfigJSON represents the MCP configuration file structure expected by
+// Claude Code's --mcp-config flag.
+type mcpConfigJSON struct {
+	MCPServers map[string]mcpServerJSON `json:"mcpServers"`
+}
+
+// mcpServerJSON represents a single MCP server entry in the config file.
+type mcpServerJSON struct {
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// buildMCPConfig serializes the MCP server configuration into a JSON string
+// suitable for the --mcp-config flag.
+func buildMCPConfig(servers map[string]axonv1alpha1.MCPServer) (string, error) {
+	cfg := mcpConfigJSON{
+		MCPServers: make(map[string]mcpServerJSON, len(servers)),
+	}
+	for name, server := range servers {
+		s := mcpServerJSON{
+			Type: server.Type,
+		}
+		switch server.Type {
+		case "stdio":
+			s.Command = server.Command
+			s.Args = server.Args
+		case "http", "sse":
+			s.URL = server.URL
+			if len(server.Headers) > 0 {
+				s.Headers = server.Headers
+			}
+		}
+		if len(server.Env) > 0 {
+			s.Env = server.Env
+		}
+		cfg.MCPServers[name] = s
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("marshaling MCP config: %w", err)
+	}
+	return string(data), nil
 }

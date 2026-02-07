@@ -44,6 +44,34 @@ type Credentials struct {
 	SecretRef SecretReference `json:"secretRef"`
 }
 
+// MCPServer defines an MCP server configuration for the coding agent.
+type MCPServer struct {
+	// Type specifies the transport type (stdio, http, or sse).
+	// +kubebuilder:validation:Enum=stdio;http;sse
+	// +kubebuilder:validation:Required
+	Type string `json:"type"`
+
+	// Command is the command to run for stdio transport.
+	// +optional
+	Command string `json:"command,omitempty"`
+
+	// Args are the arguments to pass to the command for stdio transport.
+	// +optional
+	Args []string `json:"args,omitempty"`
+
+	// URL is the server URL for http or sse transport.
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// Env is a map of environment variables to set for the MCP server.
+	// +optional
+	Env map[string]string `json:"env,omitempty"`
+
+	// Headers is a map of HTTP headers to send with requests for http or sse transport.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
 // TaskSpec defines the desired state of Task.
 type TaskSpec struct {
 	// Type specifies the agent type (e.g., claude-code).
@@ -65,6 +93,11 @@ type TaskSpec struct {
 	// WorkspaceRef optionally references a Workspace resource for the agent to work in.
 	// +optional
 	WorkspaceRef *WorkspaceReference `json:"workspaceRef,omitempty"`
+
+	// MCPServers specifies MCP servers to connect to the coding agent.
+	// The map key is the server name.
+	// +optional
+	MCPServers map[string]MCPServer `json:"mcpServers,omitempty"`
 
 	// TTLSecondsAfterFinished limits the lifetime of a Task that has finished
 	// execution (either Succeeded or Failed). If set, the Task will be

@@ -72,6 +72,11 @@ type TaskTemplate struct {
 	// +optional
 	PromptTemplate string `json:"promptTemplate,omitempty"`
 
+	// MCPServers specifies MCP servers to connect to the coding agent.
+	// The map key is the server name.
+	// +optional
+	MCPServers map[string]MCPServer `json:"mcpServers,omitempty"`
+
 	// TTLSecondsAfterFinished limits the lifetime of a Task that has finished
 	// execution (either Succeeded or Failed). If set, spawned Tasks will be
 	// automatically deleted after the given number of seconds once they reach

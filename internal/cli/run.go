@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 		name           string
 		watch          bool
 		workspace      string
+		mcpServers     []string
 	)
 
 	cmd := &cobra.Command{
@@ -119,6 +121,22 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				name = "task-" + rand.String(5)
 			}
 
+			// Build MCP servers from --mcp-server flags and config file.
+			parsedMCPServers, err := parseMCPServerFlags(mcpServers)
+			if err != nil {
+				return err
+			}
+			if cfg.Config != nil && len(cfg.Config.MCPServers) > 0 {
+				if parsedMCPServers == nil {
+					parsedMCPServers = make(map[string]axonv1alpha1.MCPServer)
+				}
+				for k, v := range cfg.Config.MCPServers {
+					if _, exists := parsedMCPServers[k]; !exists {
+						parsedMCPServers[k] = v
+					}
+				}
+			}
+
 			task := &axonv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
@@ -133,7 +151,8 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 							Name: secret,
 						},
 					},
-					Model: model,
+					Model:      model,
+					MCPServers: parsedMCPServers,
 				},
 			}
 
@@ -164,6 +183,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "task name (auto-generated if omitted)")
 	cmd.Flags().StringVar(&workspace, "workspace", "", "name of Workspace resource to use")
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch task status after creation")
+	cmd.Flags().StringArrayVar(&mcpServers, "mcp-server", nil, `MCP server in the form "name=type:target" (e.g., "my-api=http:https://api.example.com/mcp", "local-tool=stdio:npx -y @example/server")`)
 
 	cmd.MarkFlagRequired("prompt")
 
@@ -229,4 +249,56 @@ func ensureCredentialSecret(cfg *ClientConfig, name, key, value string) error {
 		return fmt.Errorf("updating credentials secret: %w", err)
 	}
 	return nil
+}
+
+// parseMCPServerFlags parses --mcp-server flag values into a map of MCPServer.
+// Each flag value should be in the format "name=type:target" where:
+//   - name is the server name
+//   - type is "http", "sse", or "stdio"
+//   - target is the URL (for http/sse) or command (for stdio)
+func parseMCPServerFlags(flags []string) (map[string]axonv1alpha1.MCPServer, error) {
+	if len(flags) == 0 {
+		return nil, nil
+	}
+
+	servers := make(map[string]axonv1alpha1.MCPServer, len(flags))
+	for _, f := range flags {
+		nameAndRest := strings.SplitN(f, "=", 2)
+		if len(nameAndRest) != 2 {
+			return nil, fmt.Errorf("invalid --mcp-server format %q: expected name=type:target", f)
+		}
+		name := nameAndRest[0]
+		typeAndTarget := strings.SplitN(nameAndRest[1], ":", 2)
+		if len(typeAndTarget) != 2 {
+			return nil, fmt.Errorf("invalid --mcp-server format %q: expected name=type:target", f)
+		}
+
+		serverType := typeAndTarget[0]
+		target := typeAndTarget[1]
+
+		switch serverType {
+		case "http", "sse":
+			// For http/sse, the target after the first colon is the URL,
+			// but we split on the first ":" which consumed the scheme separator.
+			// Re-join: target is everything after "type:" in the original value.
+			target = nameAndRest[1][len(serverType)+1:]
+			servers[name] = axonv1alpha1.MCPServer{
+				Type: serverType,
+				URL:  target,
+			}
+		case "stdio":
+			parts := strings.Fields(target)
+			server := axonv1alpha1.MCPServer{
+				Type:    "stdio",
+				Command: parts[0],
+			}
+			if len(parts) > 1 {
+				server.Args = parts[1:]
+			}
+			servers[name] = server
+		default:
+			return nil, fmt.Errorf("invalid --mcp-server type %q: expected http, sse, or stdio", serverType)
+		}
+	}
+	return servers, nil
 }

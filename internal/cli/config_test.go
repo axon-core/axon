@@ -175,6 +175,56 @@ func TestLoadConfig_WorkspaceInline(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_MCPServers(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `mcpServers:
+  my-api:
+    type: http
+    url: https://api.example.com/mcp
+  local-tool:
+    type: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@example/server"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.MCPServers) != 2 {
+		t.Fatalf("MCPServers count = %d, want 2", len(cfg.MCPServers))
+	}
+	if api, ok := cfg.MCPServers["my-api"]; !ok {
+		t.Error("MCPServers missing 'my-api'")
+	} else {
+		if api.Type != "http" {
+			t.Errorf("my-api type = %q, want %q", api.Type, "http")
+		}
+		if api.URL != "https://api.example.com/mcp" {
+			t.Errorf("my-api url = %q, want %q", api.URL, "https://api.example.com/mcp")
+		}
+	}
+	if tool, ok := cfg.MCPServers["local-tool"]; !ok {
+		t.Error("MCPServers missing 'local-tool'")
+	} else {
+		if tool.Type != "stdio" {
+			t.Errorf("local-tool type = %q, want %q", tool.Type, "stdio")
+		}
+		if tool.Command != "npx" {
+			t.Errorf("local-tool command = %q, want %q", tool.Command, "npx")
+		}
+		if len(tool.Args) != 2 {
+			t.Fatalf("local-tool args count = %d, want 2", len(tool.Args))
+		}
+	}
+}
+
 func TestLoadConfig_APIKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

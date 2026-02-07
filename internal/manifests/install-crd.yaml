@@ -71,6 +71,50 @@ spec:
                 - secretRef
                 - type
                 type: object
+              mcpServers:
+                additionalProperties:
+                  description: MCPServer defines an MCP server configuration for the
+                    coding agent.
+                  properties:
+                    args:
+                      description: Args are the arguments to pass to the command for
+                        stdio transport.
+                      items:
+                        type: string
+                      type: array
+                    command:
+                      description: Command is the command to run for stdio transport.
+                      type: string
+                    env:
+                      additionalProperties:
+                        type: string
+                      description: Env is a map of environment variables to set for
+                        the MCP server.
+                      type: object
+                    headers:
+                      additionalProperties:
+                        type: string
+                      description: Headers is a map of HTTP headers to send with requests
+                        for http or sse transport.
+                      type: object
+                    type:
+                      description: Type specifies the transport type (stdio, http,
+                        or sse).
+                      enum:
+                      - stdio
+                      - http
+                      - sse
+                      type: string
+                    url:
+                      description: URL is the server URL for http or sse transport.
+                      type: string
+                  required:
+                  - type
+                  type: object
+                description: |-
+                  MCPServers specifies MCP servers to connect to the coding agent.
+                  The map key is the server name.
+                type: object
               model:
                 description: Model optionally overrides the default model.
                 type: string
@@ -225,6 +269,50 @@ spec:
                     required:
                     - secretRef
                     - type
+                    type: object
+                  mcpServers:
+                    additionalProperties:
+                      description: MCPServer defines an MCP server configuration for
+                        the coding agent.
+                      properties:
+                        args:
+                          description: Args are the arguments to pass to the command
+                            for stdio transport.
+                          items:
+                            type: string
+                          type: array
+                        command:
+                          description: Command is the command to run for stdio transport.
+                          type: string
+                        env:
+                          additionalProperties:
+                            type: string
+                          description: Env is a map of environment variables to set
+                            for the MCP server.
+                          type: object
+                        headers:
+                          additionalProperties:
+                            type: string
+                          description: Headers is a map of HTTP headers to send with
+                            requests for http or sse transport.
+                          type: object
+                        type:
+                          description: Type specifies the transport type (stdio, http,
+                            or sse).
+                          enum:
+                          - stdio
+                          - http
+                          - sse
+                          type: string
+                        url:
+                          description: URL is the server URL for http or sse transport.
+                          type: string
+                      required:
+                      - type
+                      type: object
+                    description: |-
+                      MCPServers specifies MCP servers to connect to the coding agent.
+                      The map key is the server name.
                     type: object
                   model:
                     description: Model optionally overrides the default model.

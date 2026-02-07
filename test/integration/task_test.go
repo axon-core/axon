@@ -786,6 +786,226 @@ var _ = Describe("Task Controller", func() {
 		})
 	})
 
+	Context("When creating a Task with MCP servers", func() {
+		It("Should create a Job with MCP config init container and --mcp-config flag", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-mcp",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Task with MCP servers")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-task-mcp",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Use the API tool",
+					Credentials: axonv1alpha1.Credentials{
+						Type: axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{
+							Name: "anthropic-api-key",
+						},
+					},
+					MCPServers: map[string]axonv1alpha1.MCPServer{
+						"my-api": {
+							Type: "http",
+							URL:  "https://api.example.com/mcp",
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the main container has --mcp-config flag")
+			mainContainer := createdJob.Spec.Template.Spec.Containers[0]
+			Expect(mainContainer.Args).To(ContainElements(
+				"--mcp-config", controller.MCPConfigMountPath+"/"+controller.MCPConfigFileName,
+			))
+
+			By("Verifying the MCP config volume exists")
+			var mcpVolume *corev1.Volume
+			for i, v := range createdJob.Spec.Template.Spec.Volumes {
+				if v.Name == controller.MCPConfigVolumeName {
+					mcpVolume = &createdJob.Spec.Template.Spec.Volumes[i]
+					break
+				}
+			}
+			Expect(mcpVolume).NotTo(BeNil())
+			Expect(mcpVolume.EmptyDir).NotTo(BeNil())
+
+			By("Verifying the main container has MCP config volume mount")
+			var mcpMount *corev1.VolumeMount
+			for i, vm := range mainContainer.VolumeMounts {
+				if vm.Name == controller.MCPConfigVolumeName {
+					mcpMount = &mainContainer.VolumeMounts[i]
+					break
+				}
+			}
+			Expect(mcpMount).NotTo(BeNil())
+			Expect(mcpMount.MountPath).To(Equal(controller.MCPConfigMountPath))
+			Expect(mcpMount.ReadOnly).To(BeTrue())
+
+			By("Verifying the mcp-config init container exists")
+			var mcpInitContainer *corev1.Container
+			for i, c := range createdJob.Spec.Template.Spec.InitContainers {
+				if c.Name == "mcp-config" {
+					mcpInitContainer = &createdJob.Spec.Template.Spec.InitContainers[i]
+					break
+				}
+			}
+			Expect(mcpInitContainer).NotTo(BeNil())
+			Expect(mcpInitContainer.Command[2]).To(ContainSubstring("MCP_CONFIG"))
+
+			By("Verifying the MCP config is passed via env var")
+			Expect(mcpInitContainer.Env).To(HaveLen(1))
+			Expect(mcpInitContainer.Env[0].Name).To(Equal("MCP_CONFIG"))
+			Expect(mcpInitContainer.Env[0].Value).To(ContainSubstring("my-api"))
+			Expect(mcpInitContainer.Env[0].Value).To(ContainSubstring("https://api.example.com/mcp"))
+
+			By("Verifying the mcp-config init container runs as claude user")
+			Expect(mcpInitContainer.SecurityContext).NotTo(BeNil())
+			Expect(mcpInitContainer.SecurityContext.RunAsUser).NotTo(BeNil())
+			Expect(*mcpInitContainer.SecurityContext.RunAsUser).To(Equal(controller.ClaudeCodeUID))
+		})
+	})
+
+	Context("When creating a Task with MCP servers and workspace", func() {
+		It("Should create a Job with both MCP config and workspace volumes", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-mcp-workspace",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Workspace resource")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with MCP servers and workspace")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-mcp-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Use the tool and fix the code",
+					Credentials: axonv1alpha1.Credentials{
+						Type: axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{
+							Name: "anthropic-api-key",
+						},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace",
+					},
+					MCPServers: map[string]axonv1alpha1.MCPServer{
+						"local-tool": {
+							Type:    "stdio",
+							Command: "npx",
+							Args:    []string{"-y", "@example/server"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying both volumes exist")
+			Expect(createdJob.Spec.Template.Spec.Volumes).To(HaveLen(2))
+			volumeNames := []string{}
+			for _, v := range createdJob.Spec.Template.Spec.Volumes {
+				volumeNames = append(volumeNames, v.Name)
+			}
+			Expect(volumeNames).To(ContainElements(controller.MCPConfigVolumeName, controller.WorkspaceVolumeName))
+
+			By("Verifying the main container has both volume mounts")
+			mainContainer := createdJob.Spec.Template.Spec.Containers[0]
+			Expect(mainContainer.VolumeMounts).To(HaveLen(2))
+			mountNames := []string{}
+			for _, vm := range mainContainer.VolumeMounts {
+				mountNames = append(mountNames, vm.Name)
+			}
+			Expect(mountNames).To(ContainElements(controller.MCPConfigVolumeName, controller.WorkspaceVolumeName))
+
+			By("Verifying both init containers exist (mcp-config and git-clone)")
+			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+			initNames := []string{}
+			for _, c := range createdJob.Spec.Template.Spec.InitContainers {
+				initNames = append(initNames, c.Name)
+			}
+			Expect(initNames).To(ContainElements("mcp-config", "git-clone"))
+
+			By("Verifying the main container has --mcp-config flag")
+			Expect(mainContainer.Args).To(ContainElements(
+				"--mcp-config", controller.MCPConfigMountPath+"/"+controller.MCPConfigFileName,
+			))
+		})
+	})
+
 	Context("When creating a Task with a nonexistent workspace", func() {
 		It("Should fail with a meaningful error", func() {
 			By("Creating a namespace")

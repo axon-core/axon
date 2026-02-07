@@ -6,17 +6,20 @@ import (
 	"path/filepath"
 
 	"sigs.k8s.io/yaml"
+
+	axonv1alpha1 "github.com/gjkim42/axon/api/v1alpha1"
 )
 
 // Config holds configuration loaded from the axon config file.
 type Config struct {
-	OAuthToken     string          `json:"oauthToken,omitempty"`
-	APIKey         string          `json:"apiKey,omitempty"`
-	Secret         string          `json:"secret,omitempty"`
-	CredentialType string          `json:"credentialType,omitempty"`
-	Model          string          `json:"model,omitempty"`
-	Namespace      string          `json:"namespace,omitempty"`
-	Workspace      WorkspaceConfig `json:"workspace,omitempty"`
+	OAuthToken     string                            `json:"oauthToken,omitempty"`
+	APIKey         string                            `json:"apiKey,omitempty"`
+	Secret         string                            `json:"secret,omitempty"`
+	CredentialType string                            `json:"credentialType,omitempty"`
+	Model          string                            `json:"model,omitempty"`
+	Namespace      string                            `json:"namespace,omitempty"`
+	Workspace      WorkspaceConfig                   `json:"workspace,omitempty"`
+	MCPServers     map[string]axonv1alpha1.MCPServer `json:"mcpServers,omitempty"`
 }
 
 // WorkspaceConfig holds workspace-related configuration.
