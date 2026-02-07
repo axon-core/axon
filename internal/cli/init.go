@@ -24,6 +24,10 @@ oauthToken: ""
 # namespace: default
 
 # Default workspace (optional)
+# Reference an existing Workspace resource by name:
+# workspace:
+#   name: my-workspace
+# Or specify inline (CLI auto-creates the Workspace resource):
 # workspace:
 #   repo: https://github.com/org/repo.git
 #   ref: main

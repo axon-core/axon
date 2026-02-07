@@ -22,6 +22,7 @@ var _ = Describe("CLI", func() {
 		kubectl("delete", "task", cliTaskName, "--ignore-not-found")
 		kubectl("delete", "task", cliWorkspaceTaskName, "--ignore-not-found")
 		kubectl("delete", "task", cliFollowTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
 	})
 
 	AfterEach(func() {
@@ -36,6 +37,7 @@ var _ = Describe("CLI", func() {
 		kubectl("delete", "task", cliTaskName, "--ignore-not-found")
 		kubectl("delete", "task", cliWorkspaceTaskName, "--ignore-not-found")
 		kubectl("delete", "task", cliFollowTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 	})
 
@@ -113,14 +115,24 @@ var _ = Describe("CLI", func() {
 		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
 			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
 
+		By("creating a Workspace resource")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-cli-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
 		By("creating a Task with workspace via CLI")
 		axon("run",
 			"-p", "Run 'git log --oneline -1' and print the output",
 			"--secret", "claude-credentials",
 			"--credential-type", "oauth",
 			"--model", testModel,
-			"--workspace-repo", "https://github.com/gjkim42/axon.git",
-			"--workspace-ref", "main",
+			"--workspace", "e2e-cli-workspace",
 			"--name", cliWorkspaceTaskName,
 		)
 
@@ -132,7 +144,7 @@ var _ = Describe("CLI", func() {
 		By("verifying task status via CLI get (detail)")
 		output := axonOutput("get", "task", cliWorkspaceTaskName)
 		Expect(output).To(ContainSubstring("Succeeded"))
-		Expect(output).To(ContainSubstring("Workspace Repo"))
+		Expect(output).To(ContainSubstring("Workspace"))
 
 		By("verifying task logs via CLI")
 		logs := axonOutput("logs", cliWorkspaceTaskName)
@@ -140,6 +152,7 @@ var _ = Describe("CLI", func() {
 
 		By("deleting task via CLI")
 		axon("delete", "task", cliWorkspaceTaskName)
+		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
 
 		By("verifying task is no longer listed")
 		output = axonOutput("get", "tasks")

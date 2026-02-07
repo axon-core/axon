@@ -44,25 +44,6 @@ type Credentials struct {
 	SecretRef SecretReference `json:"secretRef"`
 }
 
-// Workspace defines the git repository to clone for the task.
-// Currently only public repositories are supported.
-type Workspace struct {
-	// Repo is the git repository URL to clone.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern="^(https?://|git://|git@).*"
-	Repo string `json:"repo"`
-
-	// Ref is the git reference to checkout (branch, tag, or commit SHA).
-	// Defaults to the repository's default branch if not specified.
-	// +optional
-	Ref string `json:"ref,omitempty"`
-
-	// SecretRef optionally references a Secret containing a GITHUB_TOKEN
-	// for git authentication and GitHub CLI (gh) operations.
-	// +optional
-	SecretRef *SecretReference `json:"secretRef,omitempty"`
-}
-
 // TaskSpec defines the desired state of Task.
 type TaskSpec struct {
 	// Type specifies the agent type (e.g., claude-code).
@@ -81,9 +62,9 @@ type TaskSpec struct {
 	// +optional
 	Model string `json:"model,omitempty"`
 
-	// Workspace optionally specifies a git repository for the agent to work in.
+	// WorkspaceRef optionally references a Workspace resource for the agent to work in.
 	// +optional
-	Workspace *Workspace `json:"workspace,omitempty"`
+	WorkspaceRef *WorkspaceReference `json:"workspaceRef,omitempty"`
 }
 
 // TaskStatus defines the observed state of Task.

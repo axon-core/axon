@@ -263,7 +263,20 @@ var _ = Describe("Task Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
-			By("Creating a Task with workspace and ref")
+			By("Creating a Workspace resource")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with workspace ref")
 			task := &axonv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-ref",
@@ -278,9 +291,8 @@ var _ = Describe("Task Controller", func() {
 							Name: "anthropic-api-key",
 						},
 					},
-					Workspace: &axonv1alpha1.Workspace{
-						Repo: "https://github.com/example/repo.git",
-						Ref:  "main",
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace",
 					},
 				},
 			}
@@ -371,7 +383,23 @@ var _ = Describe("Task Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ghSecret)).Should(Succeed())
 
-			By("Creating a Task with workspace and secretRef")
+			By("Creating a Workspace resource with secretRef")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-secret",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+					SecretRef: &axonv1alpha1.SecretReference{
+						Name: "github-token",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with workspace ref")
 			task := &axonv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-secret",
@@ -386,12 +414,8 @@ var _ = Describe("Task Controller", func() {
 							Name: "anthropic-api-key",
 						},
 					},
-					Workspace: &axonv1alpha1.Workspace{
-						Repo: "https://github.com/example/repo.git",
-						Ref:  "main",
-						SecretRef: &axonv1alpha1.SecretReference{
-							Name: "github-token",
-						},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace-secret",
 					},
 				},
 			}
@@ -421,7 +445,7 @@ var _ = Describe("Task Controller", func() {
 			Expect(mainContainer.Env[2].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
 			Expect(mainContainer.Env[2].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
 
-			By("Verifying the init container has GITHUB_TOKEN and GH_TOKEN env vars")
+			By("Verifying the init container has GITHUB_TOKEN, GH_TOKEN env vars and credential helper")
 			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			initContainer := createdJob.Spec.Template.Spec.InitContainers[0]
 			Expect(initContainer.Env).To(HaveLen(2))
@@ -432,9 +456,11 @@ var _ = Describe("Task Controller", func() {
 			Expect(initContainer.Env[1].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
 			Expect(initContainer.Env[1].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
 
-			By("Verifying the init container still does shallow clone")
+			By("Verifying the init container uses credential helper for git auth")
+			Expect(initContainer.Command).To(HaveLen(3))
+			Expect(initContainer.Command[0]).To(Equal("sh"))
 			Expect(initContainer.Args).To(Equal([]string{
-				"clone", "--branch", "main", "--single-branch", "--depth", "1",
+				"--", "clone", "--branch", "main", "--single-branch", "--depth", "1",
 				"--", "https://github.com/example/repo.git", "/workspace/repo",
 			}))
 		})
@@ -462,7 +488,19 @@ var _ = Describe("Task Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
 
-			By("Creating a Task with workspace but no ref")
+			By("Creating a Workspace resource without ref")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-noref",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with workspace ref but no git ref")
 			task := &axonv1alpha1.Task{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-workspace-noref",
@@ -477,8 +515,8 @@ var _ = Describe("Task Controller", func() {
 							Name: "anthropic-api-key",
 						},
 					},
-					Workspace: &axonv1alpha1.Workspace{
-						Repo: "https://github.com/example/repo.git",
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace-noref",
 					},
 				},
 			}
@@ -513,6 +551,66 @@ var _ = Describe("Task Controller", func() {
 			Expect(createdJob.Spec.Template.Spec.SecurityContext).NotTo(BeNil())
 			Expect(createdJob.Spec.Template.Spec.SecurityContext.FSGroup).NotTo(BeNil())
 			Expect(*createdJob.Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(controller.ClaudeCodeUID))
+		})
+	})
+
+	Context("When creating a Task with a nonexistent workspace", func() {
+		It("Should fail with a meaningful error", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-workspace-missing",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Task referencing a nonexistent Workspace")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-missing",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Fix the bug",
+					Credentials: axonv1alpha1.Credentials{
+						Type: axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{
+							Name: "anthropic-api-key",
+						},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "nonexistent-workspace",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying the Task status is Failed")
+			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdTask := &axonv1alpha1.Task{}
+
+			Eventually(func() axonv1alpha1.TaskPhase {
+				err := k8sClient.Get(ctx, taskLookupKey, createdTask)
+				if err != nil {
+					return ""
+				}
+				return createdTask.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskPhaseFailed))
+
+			Expect(createdTask.Status.Message).To(ContainSubstring("nonexistent-workspace"))
 		})
 	})
 })

@@ -1,6 +1,10 @@
 package controller
 
 import (
+	"fmt"
+	"regexp"
+	"strings"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +35,9 @@ func NewDeploymentBuilder() *DeploymentBuilder {
 }
 
 // Build creates a Deployment for the given TaskSpawner.
-func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner) *appsv1.Deployment {
+// The workspace parameter provides the repository URL and optional secretRef
+// for GitHub API authentication.
+func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv1alpha1.WorkspaceSpec) *appsv1.Deployment {
 	replicas := int32(1)
 
 	args := []string{
@@ -40,18 +46,26 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner) *appsv1.Deployme
 	}
 
 	var envVars []corev1.EnvVar
-	if ts.Spec.When.GitHubIssues != nil && ts.Spec.When.GitHubIssues.TokenSecretRef != nil {
-		envVars = append(envVars, corev1.EnvVar{
-			Name: "GITHUB_TOKEN",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: ts.Spec.When.GitHubIssues.TokenSecretRef.Name,
+	if workspace != nil {
+		owner, repo := parseGitHubOwnerRepo(workspace.Repo)
+		args = append(args,
+			"--github-owner="+owner,
+			"--github-repo="+repo,
+		)
+
+		if workspace.SecretRef != nil {
+			envVars = append(envVars, corev1.EnvVar{
+				Name: "GITHUB_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: workspace.SecretRef.Name,
+						},
+						Key: "GITHUB_TOKEN",
 					},
-					Key: "GITHUB_TOKEN",
 				},
-			},
-		})
+			})
+		}
 	}
 
 	labels := map[string]string{
@@ -92,4 +106,28 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner) *appsv1.Deployme
 			},
 		},
 	}
+}
+
+var gitHubHTTPSRe = regexp.MustCompile(`github\.com/([^/]+)/([^/.]+)`)
+var gitHubSSHRe = regexp.MustCompile(`github\.com:([^/]+)/([^/.]+)`)
+
+// parseGitHubOwnerRepo extracts owner and repo from a GitHub repository URL.
+// Supports HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git).
+func parseGitHubOwnerRepo(repoURL string) (owner, repo string) {
+	repoURL = strings.TrimSuffix(repoURL, ".git")
+
+	if m := gitHubHTTPSRe.FindStringSubmatch(repoURL); len(m) == 3 {
+		return m[1], m[2]
+	}
+	if m := gitHubSSHRe.FindStringSubmatch(repoURL); len(m) == 3 {
+		return m[1], m[2]
+	}
+
+	// Fallback: try splitting by '/' and taking last two segments
+	parts := strings.Split(strings.TrimSuffix(repoURL, "/"), "/")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2], parts[len(parts)-1]
+	}
+
+	return "", fmt.Sprintf("unknown-repo-%s", repoURL)
 }

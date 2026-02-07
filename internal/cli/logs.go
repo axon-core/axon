@@ -52,7 +52,7 @@ func newLogsCommand(cfg *ClientConfig) *cobra.Command {
 				}
 			}
 
-			if follow && task.Spec.Workspace != nil {
+			if follow && task.Spec.WorkspaceRef != nil {
 				fmt.Fprintf(os.Stderr, "Streaming init container (git-clone) logs...\n")
 				if err := streamLogs(ctx, cs, ns, task.Status.PodName, "git-clone", follow); err != nil {
 					return err

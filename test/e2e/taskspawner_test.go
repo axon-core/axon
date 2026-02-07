@@ -17,6 +17,7 @@ var _ = Describe("TaskSpawner", func() {
 
 		By("cleaning up existing resources")
 		kubectl("delete", "taskspawner", taskSpawnerName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-spawner-workspace", "--ignore-not-found")
 		kubectl("delete", "secret", "github-token", "--ignore-not-found")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 	})
@@ -34,6 +35,7 @@ var _ = Describe("TaskSpawner", func() {
 
 		By("cleaning up test resources")
 		kubectl("delete", "taskspawner", taskSpawnerName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-spawner-workspace", "--ignore-not-found")
 		kubectl("delete", "secret", "github-token", "--ignore-not-found")
 		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
 	})
@@ -47,6 +49,19 @@ var _ = Describe("TaskSpawner", func() {
 		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
 			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
 
+		By("creating a Workspace resource with secretRef")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-spawner-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+  ref: main
+  secretRef:
+    name: github-token
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
 		By("creating a TaskSpawner")
 		tsYAML := `apiVersion: axon.io/v1alpha1
 kind: TaskSpawner
@@ -55,12 +70,10 @@ metadata:
 spec:
   when:
     githubIssues:
-      owner: gjkim42
-      repo: axon
+      workspaceRef:
+        name: e2e-spawner-workspace
       labels: [bug]
       state: open
-      tokenSecretRef:
-        name: github-token
   taskTemplate:
     type: claude-code
     credentials:
@@ -89,6 +102,16 @@ spec:
 	})
 
 	It("should be accessible via CLI", func() {
+		By("creating a Workspace resource")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-spawner-workspace
+spec:
+  repo: https://github.com/gjkim42/axon.git
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
 		By("creating a TaskSpawner")
 		tsYAML := `apiVersion: axon.io/v1alpha1
 kind: TaskSpawner
@@ -97,8 +120,8 @@ metadata:
 spec:
   when:
     githubIssues:
-      owner: gjkim42
-      repo: axon
+      workspaceRef:
+        name: e2e-spawner-workspace
   taskTemplate:
     type: claude-code
     credentials:
