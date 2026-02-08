@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 ARG GO_VERSION=1.25.0
 
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    make \
     curl \
     ca-certificates \
     git \
