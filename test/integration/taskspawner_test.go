@@ -459,7 +459,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 	})
 
 	Context("When creating a TaskSpawner with a nonexistent workspace", func() {
-		It("Should fail with a meaningful error", func() {
+		It("Should not create a Deployment and keep retrying", func() {
 			By("Creating a namespace")
 			ns := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -495,19 +495,44 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
 
-			By("Verifying the TaskSpawner phase is Failed")
+			By("Verifying no Deployment is created while workspace is missing")
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdDeploy := &appsv1.Deployment{}
+
+			Consistently(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err != nil
+			}, 3*time.Second, interval).Should(BeTrue())
+
+			By("Verifying the TaskSpawner is not marked as Failed")
 			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
 			createdTS := &axonv1alpha1.TaskSpawner{}
 
-			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+			Consistently(func() bool {
 				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
 				if err != nil {
-					return ""
+					return true
 				}
-				return createdTS.Status.Phase
-			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhaseFailed))
+				return createdTS.Status.Phase != axonv1alpha1.TaskSpawnerPhaseFailed
+			}, 3*time.Second, interval).Should(BeTrue())
 
-			Expect(createdTS.Status.Message).To(ContainSubstring("nonexistent-workspace"))
+			By("Creating the Workspace and verifying the Deployment is eventually created")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nonexistent-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 
