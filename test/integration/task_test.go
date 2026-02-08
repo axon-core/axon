@@ -787,7 +787,7 @@ var _ = Describe("Task Controller", func() {
 	})
 
 	Context("When creating a Task with a nonexistent workspace", func() {
-		It("Should fail with a meaningful error", func() {
+		It("Should not create a Job and keep retrying", func() {
 			By("Creating a namespace")
 			ns := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -830,19 +830,44 @@ var _ = Describe("Task Controller", func() {
 			}
 			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
 
-			By("Verifying the Task status is Failed")
+			By("Verifying no Job is created while workspace is missing")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Consistently(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err != nil
+			}, 3*time.Second, interval).Should(BeTrue())
+
+			By("Verifying the Task is not marked as Failed")
 			taskLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
 			createdTask := &axonv1alpha1.Task{}
 
-			Eventually(func() axonv1alpha1.TaskPhase {
+			Consistently(func() bool {
 				err := k8sClient.Get(ctx, taskLookupKey, createdTask)
 				if err != nil {
-					return ""
+					return true
 				}
-				return createdTask.Status.Phase
-			}, timeout, interval).Should(Equal(axonv1alpha1.TaskPhaseFailed))
+				return createdTask.Status.Phase != axonv1alpha1.TaskPhaseFailed
+			}, 3*time.Second, interval).Should(BeTrue())
 
-			Expect(createdTask.Status.Message).To(ContainSubstring("nonexistent-workspace"))
+			By("Creating the Workspace and verifying the Job is eventually created")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "nonexistent-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 		})
 	})
 })

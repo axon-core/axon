@@ -147,16 +147,11 @@ func (r *TaskReconciler) createJob(ctx context.Context, task *axonv1alpha1.Task)
 			Namespace: task.Namespace,
 			Name:      task.Spec.WorkspaceRef.Name,
 		}, &ws); err != nil {
-			logger.Error(err, "Unable to fetch Workspace", "workspace", task.Spec.WorkspaceRef.Name)
 			if apierrors.IsNotFound(err) {
-				task.Status.Phase = axonv1alpha1.TaskPhaseFailed
-				task.Status.Message = fmt.Sprintf("Workspace %q not found", task.Spec.WorkspaceRef.Name)
-				if updateErr := r.Status().Update(ctx, task); updateErr != nil {
-					logger.Error(updateErr, "Unable to update Task status")
-					return ctrl.Result{}, updateErr
-				}
-				return ctrl.Result{}, nil
+				logger.Info("Workspace not found yet, requeuing", "workspace", task.Spec.WorkspaceRef.Name)
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 			}
+			logger.Error(err, "Unable to fetch Workspace", "workspace", task.Spec.WorkspaceRef.Name)
 			return ctrl.Result{}, err
 		}
 		workspace = &ws.Spec
