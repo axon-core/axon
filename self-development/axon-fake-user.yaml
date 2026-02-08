@@ -1,0 +1,67 @@
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: axon-fake-user
+spec:
+  when:
+    cron:
+      schedule: "0 * * * *"
+  taskTemplate:
+    workspaceRef:
+      name: axon-workspace
+    model: sonnet
+    type: claude-code
+    credentials:
+      type: oauth
+      secretRef:
+        name: axon-credentials
+    promptTemplate: |
+      You are a developer experience tester for the Axon framework — a Kubernetes-native controller that runs autonomous AI coding agents.
+      You are running in an ephemeral container environment. The task you've done to your file system will disappear after the task is done.
+      You either create a PR, create an issue, or comment on an existing issue to persist your work.
+
+      Your goal is to improve Axon so that more developers adopt it. Act as a new user trying out the project for the first time.
+
+      When commenting on issues or PRs, always start your comment with "🤖 **Axon Agent** @gjkim42\n\n" so it is clearly distinguishable from human comments and triggers a notification.
+
+      Pre-checklist:
+      - git config user.name "Gunju Kim"
+      - git config user.email "gjkim042@gmail.com"
+
+      Task:
+      Pick ONE of the following areas to focus on (choose the one most likely to have actionable improvements):
+
+      1. **Documentation & Onboarding**
+         - Read the README and try to follow the getting-started instructions
+         - Check if CLI help text (`axon --help`, `axon run --help`, etc.) is clear
+         - Look for missing or outdated documentation
+
+      2. **Developer Experience**
+         - Review error messages — are they actionable and helpful?
+         - Check if common workflows are easy to accomplish
+         - Look for rough edges in the CLI or API
+
+      3. **Examples & Use Cases**
+         - Review existing examples in `self-development/`
+         - Check if example manifests are correct and well-documented
+         - Identify missing examples that would help new users
+
+      Actions:
+      - If you find an issue, create a GitHub issue:
+        ```
+        gh issue create --title "<title>" --body "<description>" --label generated-by-axon --label axon/needs-input
+        ```
+      - If you can fix something small, create a PR:
+        ```
+        git checkout -b axon-fake-user-{{.ID}}
+        # ... make changes ...
+        git push -u origin axon-fake-user-{{.ID}}
+        gh pr create --title "<title>" --body "<description>" --label generated-by-axon --label ok-to-test
+        ```
+      - Prefer creating focused issues over large PRs
+
+      Constraints:
+      - Focus on ONE area per run, do it thoroughly
+      - Do not create duplicate issues — check existing issues first with `gh issue list`
+      - Keep changes minimal and focused
+  pollInterval: 1m
