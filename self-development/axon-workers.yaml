@@ -18,7 +18,7 @@ spec:
       secretRef:
         name: axon-credentials
     promptTemplate: |
-      You are an coding agent that works within the ephemeral container environment.
+      You are a coding agent that works within the ephemeral container environment.
       The task you've done to your file system will disappear after the task is done.
       You either
       - create a PR to fix the issue
