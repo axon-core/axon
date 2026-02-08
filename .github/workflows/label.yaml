@@ -2,7 +2,7 @@ name: Label
 
 on:
   issues:
-    types: [opened, labeled, unlabeled]
+    types: [opened, closed, labeled, unlabeled]
   pull_request_target:
     types: [opened, labeled, unlabeled]
 
@@ -64,5 +64,31 @@ jobs:
                 repo: context.repo.repo,
                 issue_number: item.number,
                 name: 'needs-kind',
+              });
+            }
+
+  reopen-protected-issues:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reopen issues with do-not-remove labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const isProtected = issue.labels.some(l => l.name.startsWith('do-not-remove/'));
+
+            if (isProtected) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'open',
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: 'Reopening this issue because it has a `do-not-remove/` label. Issues with this label prefix are protected and must remain open.',
               });
             }
