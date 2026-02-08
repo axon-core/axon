@@ -886,6 +886,115 @@ var _ = Describe("Task Controller", func() {
 		})
 	})
 
+	Context("When creating a Task with a GitHub Enterprise workspace", func() {
+		It("Should create a Job with GH_HOST env var", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-ghe-workspace",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Secret with GITHUB_TOKEN")
+			ghSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-token",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"GITHUB_TOKEN": "test-gh-token",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ghSecret)).Should(Succeed())
+
+			By("Creating a Workspace resource with GitHub Enterprise URL")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ghe-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.example.com/my-org/my-repo.git",
+					Ref:  "main",
+					SecretRef: &axonv1alpha1.SecretReference{
+						Name: "github-token",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task referencing the GHE workspace")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ghe-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Fix the bug",
+					Credentials: axonv1alpha1.Credentials{
+						Type: axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{
+							Name: "anthropic-api-key",
+						},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-ghe-workspace",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the main container has GH_HOST env var for enterprise host")
+			mainContainer := createdJob.Spec.Template.Spec.Containers[0]
+			var ghHostFound bool
+			for _, env := range mainContainer.Env {
+				if env.Name == "GH_HOST" {
+					ghHostFound = true
+					Expect(env.Value).To(Equal("github.example.com"))
+				}
+			}
+			Expect(ghHostFound).To(BeTrue(), "Expected GH_HOST env var in main container")
+
+			By("Verifying the init container has GH_HOST env var")
+			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := createdJob.Spec.Template.Spec.InitContainers[0]
+			var initGHHostFound bool
+			for _, env := range initContainer.Env {
+				if env.Name == "GH_HOST" {
+					initGHHostFound = true
+					Expect(env.Value).To(Equal("github.example.com"))
+				}
+			}
+			Expect(initGHHostFound).To(BeTrue(), "Expected GH_HOST env var in init container")
+		})
+	})
+
 	Context("When creating a Task with a nonexistent workspace", func() {
 		It("Should not create a Job and keep retrying", func() {
 			By("Creating a namespace")

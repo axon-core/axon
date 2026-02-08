@@ -118,6 +118,16 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 		workspaceEnvVars = append(workspaceEnvVars, githubTokenEnv, ghTokenEnv)
 	}
 
+	// Set GH_HOST for GitHub Enterprise so that gh CLI targets the correct host.
+	if workspace != nil {
+		host, _, _ := parseGitHubRepo(workspace.Repo)
+		if host != "" && host != "github.com" {
+			ghHostEnv := corev1.EnvVar{Name: "GH_HOST", Value: host}
+			envVars = append(envVars, ghHostEnv)
+			workspaceEnvVars = append(workspaceEnvVars, ghHostEnv)
+		}
+	}
+
 	backoffLimit := int32(0)
 	claudeCodeUID := ClaudeCodeUID
 

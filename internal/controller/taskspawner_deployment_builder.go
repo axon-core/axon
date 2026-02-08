@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -47,11 +48,14 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 
 	var envVars []corev1.EnvVar
 	if workspace != nil {
-		owner, repo := parseGitHubOwnerRepo(workspace.Repo)
+		host, owner, repo := parseGitHubRepo(workspace.Repo)
 		args = append(args,
 			"--github-owner="+owner,
 			"--github-repo="+repo,
 		)
+		if apiBaseURL := gitHubAPIBaseURL(host); apiBaseURL != "" {
+			args = append(args, "--github-api-base-url="+apiBaseURL)
+		}
 
 		if workspace.SecretRef != nil {
 			envVars = append(envVars, corev1.EnvVar{
@@ -108,26 +112,47 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 	}
 }
 
-var gitHubHTTPSRe = regexp.MustCompile(`github\.com/([^/]+)/([^/.]+)`)
-var gitHubSSHRe = regexp.MustCompile(`github\.com:([^/]+)/([^/.]+)`)
+// httpsRepoRe matches HTTPS-style repository URLs: https://host/owner/repo
+var httpsRepoRe = regexp.MustCompile(`https?://([^/]+)/([^/]+)/([^/.]+)`)
 
-// parseGitHubOwnerRepo extracts owner and repo from a GitHub repository URL.
-// Supports HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git).
-func parseGitHubOwnerRepo(repoURL string) (owner, repo string) {
+// sshRepoRe matches SSH-style repository URLs: git@host:owner/repo
+var sshRepoRe = regexp.MustCompile(`git@([^:]+):([^/]+)/([^/.]+)`)
+
+// parseGitHubRepo extracts the host, owner, and repo from a GitHub repository URL.
+// Supports HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git)
+// for both github.com and GitHub Enterprise hosts.
+func parseGitHubRepo(repoURL string) (host, owner, repo string) {
 	repoURL = strings.TrimSuffix(repoURL, ".git")
 
-	if m := gitHubHTTPSRe.FindStringSubmatch(repoURL); len(m) == 3 {
-		return m[1], m[2]
+	if m := httpsRepoRe.FindStringSubmatch(repoURL); len(m) == 4 {
+		return m[1], m[2], m[3]
 	}
-	if m := gitHubSSHRe.FindStringSubmatch(repoURL); len(m) == 3 {
-		return m[1], m[2]
+	if m := sshRepoRe.FindStringSubmatch(repoURL); len(m) == 4 {
+		return m[1], m[2], m[3]
 	}
 
 	// Fallback: try splitting by '/' and taking last two segments
 	parts := strings.Split(strings.TrimSuffix(repoURL, "/"), "/")
 	if len(parts) >= 2 {
-		return parts[len(parts)-2], parts[len(parts)-1]
+		return "", parts[len(parts)-2], parts[len(parts)-1]
 	}
 
-	return "", fmt.Sprintf("unknown-repo-%s", repoURL)
+	return "", "", fmt.Sprintf("unknown-repo-%s", repoURL)
+}
+
+// parseGitHubOwnerRepo extracts owner and repo from a GitHub repository URL.
+// Supports HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git).
+func parseGitHubOwnerRepo(repoURL string) (owner, repo string) {
+	_, owner, repo = parseGitHubRepo(repoURL)
+	return owner, repo
+}
+
+// gitHubAPIBaseURL returns the GitHub API base URL for the given host.
+// For github.com (or empty host) it returns an empty string, as the spawner uses the default API endpoint.
+// For GitHub Enterprise hosts it returns "https://<host>/api/v3".
+func gitHubAPIBaseURL(host string) string {
+	if host == "" || host == "github.com" {
+		return ""
+	}
+	return (&url.URL{Scheme: "https", Host: host, Path: "/api/v3"}).String()
 }

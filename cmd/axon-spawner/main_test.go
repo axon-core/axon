@@ -101,6 +101,46 @@ func newTask(name, namespace, spawnerName string, phase axonv1alpha1.TaskPhase) 
 	}
 }
 
+func TestBuildSource_GitHubIssuesWithBaseURL(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+
+	src, err := buildSource(ts, "my-org", "my-repo", "https://github.example.com/api/v3")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ghSrc, ok := src.(*source.GitHubSource)
+	if !ok {
+		t.Fatalf("Expected *source.GitHubSource, got %T", src)
+	}
+	if ghSrc.BaseURL != "https://github.example.com/api/v3" {
+		t.Errorf("BaseURL = %q, want %q", ghSrc.BaseURL, "https://github.example.com/api/v3")
+	}
+	if ghSrc.Owner != "my-org" {
+		t.Errorf("Owner = %q, want %q", ghSrc.Owner, "my-org")
+	}
+	if ghSrc.Repo != "my-repo" {
+		t.Errorf("Repo = %q, want %q", ghSrc.Repo, "my-repo")
+	}
+}
+
+func TestBuildSource_GitHubIssuesDefaultBaseURL(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+
+	src, err := buildSource(ts, "axon-core", "axon", "")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ghSrc, ok := src.(*source.GitHubSource)
+	if !ok {
+		t.Fatalf("Expected *source.GitHubSource, got %T", src)
+	}
+	if ghSrc.BaseURL != "" {
+		t.Errorf("BaseURL = %q, want empty (defaults to api.github.com)", ghSrc.BaseURL)
+	}
+}
+
 func TestRunCycleWithSource_NoMaxConcurrency(t *testing.T) {
 	ts := newTaskSpawner("spawner", "default", nil)
 	cl, key := setupTest(t, ts)

@@ -296,6 +296,92 @@ func TestBuildClaudeCodeJob_CustomImageWithWorkspace(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeCodeJob_EnterpriseWorkspaceSetsGHHost(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ghe",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the bug",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.example.com/my-org/my-repo.git",
+		SecretRef: &axonv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	var ghHostValue string
+	for _, env := range container.Env {
+		if env.Name == "GH_HOST" {
+			ghHostValue = env.Value
+		}
+	}
+	if ghHostValue != "github.example.com" {
+		t.Errorf("Expected GH_HOST = %q, got %q", "github.example.com", ghHostValue)
+	}
+
+	initContainer := job.Spec.Template.Spec.InitContainers[0]
+	var initGHHostValue string
+	for _, env := range initContainer.Env {
+		if env.Name == "GH_HOST" {
+			initGHHostValue = env.Value
+		}
+	}
+	if initGHHostValue != "github.example.com" {
+		t.Errorf("Expected init container GH_HOST = %q, got %q", "github.example.com", initGHHostValue)
+	}
+}
+
+func TestBuildClaudeCodeJob_GithubComWorkspaceNoGHHost(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-no-ghe",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the bug",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-org/my-repo.git",
+	}
+
+	job, err := builder.Build(task, workspace)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	for _, env := range container.Env {
+		if env.Name == "GH_HOST" {
+			t.Error("GH_HOST should not be set for github.com workspace")
+		}
+	}
+}
+
 func TestBuildClaudeCodeJob_UnsupportedType(t *testing.T) {
 	builder := NewJobBuilder()
 	task := &axonv1alpha1.Task{
