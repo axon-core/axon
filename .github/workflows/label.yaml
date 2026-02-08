@@ -31,12 +31,16 @@ jobs:
                 labels: ['needs-triage'],
               });
             } else if (hasTriageAccepted && hasNeedsTriage) {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: item.number,
-                name: 'needs-triage',
-              });
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: item.number,
+                  name: 'needs-triage',
+                });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
             }
 
   kind-label:
@@ -59,12 +63,16 @@ jobs:
                 labels: ['needs-kind'],
               });
             } else if (hasKind && hasNeedsKind) {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: item.number,
-                name: 'needs-kind',
-              });
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: item.number,
+                  name: 'needs-kind',
+                });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
             }
 
   priority-label:
@@ -87,10 +95,14 @@ jobs:
                 labels: ['needs-priority'],
               });
             } else if (hasPriority && hasNeedsPriority) {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: item.number,
-                name: 'needs-priority',
-              });
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: item.number,
+                  name: 'needs-priority',
+                });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
             }
