@@ -52,6 +52,8 @@ func newLogsCommand(cfg *ClientConfig) *cobra.Command {
 				}
 			}
 
+			containerName := task.Spec.Type
+
 			if follow && task.Spec.WorkspaceRef != nil {
 				fmt.Fprintf(os.Stderr, "Streaming init container (git-clone) logs...\n")
 				if err := streamLogs(ctx, cs, ns, task.Status.PodName, "git-clone", follow); err != nil {
@@ -60,9 +62,9 @@ func newLogsCommand(cfg *ClientConfig) *cobra.Command {
 			}
 
 			if follow {
-				fmt.Fprintf(os.Stderr, "Streaming container (claude-code) logs...\n")
+				fmt.Fprintf(os.Stderr, "Streaming container (%s) logs...\n", containerName)
 			}
-			return streamClaudeCodeLogs(ctx, cs, ns, task.Status.PodName, follow)
+			return streamAgentLogs(ctx, cs, ns, task.Status.PodName, containerName, task.Spec.Type, follow)
 		},
 	}
 
@@ -126,10 +128,10 @@ func streamLogs(ctx context.Context, cs *kubernetes.Clientset, namespace, podNam
 	}
 }
 
-func streamClaudeCodeLogs(ctx context.Context, cs *kubernetes.Clientset, namespace, podName string, follow bool) error {
+func streamAgentLogs(ctx context.Context, cs *kubernetes.Clientset, namespace, podName, container, agentType string, follow bool) error {
 	opts := &corev1.PodLogOptions{
 		Follow:    follow,
-		Container: "claude-code",
+		Container: container,
 	}
 
 	for {
@@ -143,7 +145,12 @@ func streamClaudeCodeLogs(ctx context.Context, cs *kubernetes.Clientset, namespa
 		}
 		defer stream.Close()
 
-		return ParseAndFormatLogs(stream, os.Stdout, os.Stderr)
+		switch agentType {
+		case "codex":
+			return ParseAndFormatCodexLogs(stream, os.Stdout, os.Stderr)
+		default:
+			return ParseAndFormatLogs(stream, os.Stdout, os.Stderr)
+		}
 	}
 }
 

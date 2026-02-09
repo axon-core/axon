@@ -29,8 +29,9 @@ Axon sets the following reserved environment variables on agent containers:
 | Variable | Description | Always set? |
 |---|---|---|
 | `AXON_MODEL` | The model name to use | Only when `model` is specified in the Task |
-| `ANTHROPIC_API_KEY` | API key for Anthropic (api-key credential type) | When credential type is `api-key` |
-| `CLAUDE_CODE_OAUTH_TOKEN` | OAuth token (oauth credential type) | When credential type is `oauth` |
+| `ANTHROPIC_API_KEY` | API key for Anthropic (`claude-code` agent, api-key credential type) | When credential type is `api-key` and agent type is `claude-code` |
+| `CODEX_API_KEY` | API key for OpenAI Codex (`codex` agent, api-key or oauth credential type) | When agent type is `codex` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | OAuth token (`claude-code` agent, oauth credential type) | When credential type is `oauth` and agent type is `claude-code` |
 | `GITHUB_TOKEN` | GitHub token for workspace access | When workspace has a `secretRef` |
 | `GH_TOKEN` | GitHub token (alias for GitHub CLI) | When workspace has a `secretRef` |
 
@@ -53,7 +54,7 @@ When a workspace is configured, Axon mounts the cloned repository at
 `/workspace/repo` and sets `WorkingDir` on the container accordingly. The
 entrypoint script does not need to handle directory changes.
 
-## Reference implementation
+## Reference implementations
 
-See `claude-code/axon_entrypoint.sh` for a reference implementation that wraps
-the `claude` CLI.
+- `claude-code/axon_entrypoint.sh` — wraps the `claude` CLI (Anthropic Claude Code).
+- `codex/axon_entrypoint.sh` — wraps the `codex` CLI (OpenAI Codex).

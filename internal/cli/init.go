@@ -17,6 +17,9 @@ oauthToken: ""
 # Or use an API key instead:
 # apiKey: ""
 
+# Agent type (optional, default: claude-code)
+# type: claude-code
+
 # Model override (optional)
 # model: ""
 

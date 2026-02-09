@@ -14,6 +14,7 @@ type Config struct {
 	APIKey         string          `json:"apiKey,omitempty"`
 	Secret         string          `json:"secret,omitempty"`
 	CredentialType string          `json:"credentialType,omitempty"`
+	Type           string          `json:"type,omitempty"`
 	Model          string          `json:"model,omitempty"`
 	Namespace      string          `json:"namespace,omitempty"`
 	Workspace      WorkspaceConfig `json:"workspace,omitempty"`

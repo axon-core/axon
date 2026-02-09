@@ -12,6 +12,7 @@ func TestLoadConfig_ValidFull(t *testing.T) {
 	content := `
 secret: my-secret
 credentialType: oauth
+type: codex
 model: claude-sonnet-4-5-20250929
 namespace: my-namespace
 workspace:
@@ -31,6 +32,9 @@ workspace:
 	}
 	if cfg.CredentialType != "oauth" {
 		t.Errorf("CredentialType = %q, want %q", cfg.CredentialType, "oauth")
+	}
+	if cfg.Type != "codex" {
+		t.Errorf("Type = %q, want %q", cfg.Type, "codex")
 	}
 	if cfg.Model != "claude-sonnet-4-5-20250929" {
 		t.Errorf("Model = %q, want %q", cfg.Model, "claude-sonnet-4-5-20250929")
@@ -172,6 +176,42 @@ func TestLoadConfig_WorkspaceInline(t *testing.T) {
 	}
 	if cfg.Workspace.Name != "" {
 		t.Errorf("Workspace.Name = %q, want empty", cfg.Workspace.Name)
+	}
+}
+
+func TestLoadConfig_Type(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `type: codex
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Type != "codex" {
+		t.Errorf("Type = %q, want %q", cfg.Type, "codex")
+	}
+}
+
+func TestLoadConfig_TypeEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `secret: my-secret
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Type != "" {
+		t.Errorf("Type = %q, want empty", cfg.Type)
 	}
 }
 

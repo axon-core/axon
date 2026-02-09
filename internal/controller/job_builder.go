@@ -14,8 +14,14 @@ const (
 	// ClaudeCodeImage is the default image for Claude Code agent.
 	ClaudeCodeImage = "gjkim42/claude-code:latest"
 
+	// CodexImage is the default image for OpenAI Codex agent.
+	CodexImage = "gjkim42/codex:latest"
+
 	// AgentTypeClaudeCode is the agent type for Claude Code.
 	AgentTypeClaudeCode = "claude-code"
+
+	// AgentTypeCodex is the agent type for OpenAI Codex.
+	AgentTypeCodex = "codex"
 
 	// GitCloneImage is the image used for cloning git repositories.
 	GitCloneImage = "alpine/git:v2.47.2"
@@ -26,37 +32,71 @@ const (
 	// WorkspaceMountPath is the mount path for the workspace volume.
 	WorkspaceMountPath = "/workspace"
 
-	// ClaudeCodeUID is the UID shared between the git-clone init
+	// AgentUID is the UID shared between the git-clone init
 	// container and the agent container. Custom agent images must run
 	// as this UID so that both containers can read and write the
-	// workspace. This must be kept in sync with claude-code/Dockerfile.
-	ClaudeCodeUID = int64(61100)
+	// workspace. This must be kept in sync with agent Dockerfiles.
+	AgentUID = int64(61100)
+
+	// ClaudeCodeUID is an alias for AgentUID for backward compatibility.
+	ClaudeCodeUID = AgentUID
 )
 
 // JobBuilder constructs Kubernetes Jobs for Tasks.
 type JobBuilder struct {
 	ClaudeCodeImage           string
 	ClaudeCodeImagePullPolicy corev1.PullPolicy
+	CodexImage                string
+	CodexImagePullPolicy      corev1.PullPolicy
 }
 
 // NewJobBuilder creates a new JobBuilder.
 func NewJobBuilder() *JobBuilder {
-	return &JobBuilder{ClaudeCodeImage: ClaudeCodeImage}
+	return &JobBuilder{
+		ClaudeCodeImage: ClaudeCodeImage,
+		CodexImage:      CodexImage,
+	}
 }
 
 // Build creates a Job for the given Task.
 func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec) (*batchv1.Job, error) {
 	switch task.Spec.Type {
 	case AgentTypeClaudeCode:
-		return b.buildClaudeCodeJob(task, workspace)
+		return b.buildAgentJob(task, workspace, b.ClaudeCodeImage, b.ClaudeCodeImagePullPolicy)
+	case AgentTypeCodex:
+		return b.buildAgentJob(task, workspace, b.CodexImage, b.CodexImagePullPolicy)
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", task.Spec.Type)
 	}
 }
 
-// buildClaudeCodeJob creates a Job for Claude Code agent.
-func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec) (*batchv1.Job, error) {
-	image := b.ClaudeCodeImage
+// apiKeyEnvVar returns the environment variable name used for API key
+// credentials for the given agent type.
+func apiKeyEnvVar(agentType string) string {
+	switch agentType {
+	case AgentTypeCodex:
+		// CODEX_API_KEY is the environment variable that codex exec reads
+		// for non-interactive authentication.
+		return "CODEX_API_KEY"
+	default:
+		return "ANTHROPIC_API_KEY"
+	}
+}
+
+// oauthEnvVar returns the environment variable name used for OAuth
+// credentials for the given agent type.
+func oauthEnvVar(agentType string) string {
+	switch agentType {
+	case AgentTypeCodex:
+		return "CODEX_API_KEY"
+	default:
+		return "CLAUDE_CODE_OAUTH_TOKEN"
+	}
+}
+
+// buildAgentJob creates a Job for the given agent type.
+func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alpha1.WorkspaceSpec, defaultImage string, pullPolicy corev1.PullPolicy) (*batchv1.Job, error) {
+	image := defaultImage
 	if task.Spec.Image != "" {
 		image = task.Spec.Image
 	}
@@ -73,26 +113,28 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 
 	switch task.Spec.Credentials.Type {
 	case axonv1alpha1.CredentialTypeAPIKey:
+		keyName := apiKeyEnvVar(task.Spec.Type)
 		envVars = append(envVars, corev1.EnvVar{
-			Name: "ANTHROPIC_API_KEY",
+			Name: keyName,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: task.Spec.Credentials.SecretRef.Name,
 					},
-					Key: "ANTHROPIC_API_KEY",
+					Key: keyName,
 				},
 			},
 		})
 	case axonv1alpha1.CredentialTypeOAuth:
+		tokenName := oauthEnvVar(task.Spec.Type)
 		envVars = append(envVars, corev1.EnvVar{
-			Name: "CLAUDE_CODE_OAUTH_TOKEN",
+			Name: tokenName,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: task.Spec.Credentials.SecretRef.Name,
 					},
-					Key: "CLAUDE_CODE_OAUTH_TOKEN",
+					Key: tokenName,
 				},
 			},
 		})
@@ -129,12 +171,12 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 	}
 
 	backoffLimit := int32(0)
-	claudeCodeUID := ClaudeCodeUID
+	agentUID := AgentUID
 
 	mainContainer := corev1.Container{
-		Name:            "claude-code",
+		Name:            task.Spec.Type,
 		Image:           image,
-		ImagePullPolicy: b.ClaudeCodeImagePullPolicy,
+		ImagePullPolicy: pullPolicy,
 		Command:         []string{"/axon_entrypoint.sh"},
 		Args:            []string{task.Spec.Prompt},
 		Env:             envVars,
@@ -146,7 +188,7 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 
 	if workspace != nil {
 		podSecurityContext = &corev1.PodSecurityContext{
-			FSGroup: &claudeCodeUID,
+			FSGroup: &agentUID,
 		}
 
 		volume := corev1.Volume{
@@ -175,7 +217,7 @@ func (b *JobBuilder) buildClaudeCodeJob(task *axonv1alpha1.Task, workspace *axon
 			Env:          workspaceEnvVars,
 			VolumeMounts: []corev1.VolumeMount{volumeMount},
 			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: &claudeCodeUID,
+				RunAsUser: &agentUID,
 			},
 		}
 

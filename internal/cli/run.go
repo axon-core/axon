@@ -40,6 +40,9 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				if !cmd.Flags().Changed("credential-type") && c.CredentialType != "" {
 					credentialType = c.CredentialType
 				}
+				if !cmd.Flags().Changed("type") && c.Type != "" {
+					agentType = c.Type
+				}
 				if !cmd.Flags().Changed("model") && c.Model != "" {
 					model = c.Model
 				}
@@ -54,13 +57,15 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 					return fmt.Errorf("config file must specify either oauthToken or apiKey, not both")
 				}
 				if token := cfg.Config.OAuthToken; token != "" {
-					if err := ensureCredentialSecret(cfg, "axon-credentials", "CLAUDE_CODE_OAUTH_TOKEN", token); err != nil {
+					oauthKey := oauthSecretKey(agentType)
+					if err := ensureCredentialSecret(cfg, "axon-credentials", oauthKey, token); err != nil {
 						return err
 					}
 					secret = "axon-credentials"
 					credentialType = "oauth"
 				} else if key := cfg.Config.APIKey; key != "" {
-					if err := ensureCredentialSecret(cfg, "axon-credentials", "ANTHROPIC_API_KEY", key); err != nil {
+					apiKey := apiKeySecretKey(agentType)
+					if err := ensureCredentialSecret(cfg, "axon-credentials", apiKey, key); err != nil {
 						return err
 					}
 					secret = "axon-credentials"
@@ -171,6 +176,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.MarkFlagRequired("prompt")
 
 	_ = cmd.RegisterFlagCompletionFunc("credential-type", cobra.FixedCompletions([]string{"api-key", "oauth"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex"}, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }
@@ -194,6 +200,24 @@ func watchTask(ctx context.Context, cl client.Client, name, namespace string) er
 
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// apiKeySecretKey returns the secret key name for API key credentials
+// based on the agent type.
+func apiKeySecretKey(agentType string) string {
+	if agentType == "codex" {
+		return "CODEX_API_KEY"
+	}
+	return "ANTHROPIC_API_KEY"
+}
+
+// oauthSecretKey returns the secret key name for OAuth credentials
+// based on the agent type.
+func oauthSecretKey(agentType string) string {
+	if agentType == "codex" {
+		return "CODEX_API_KEY"
+	}
+	return "CLAUDE_CODE_OAUTH_TOKEN"
 }
 
 // ensureCredentialSecret creates or updates a Secret with the given credential key and value.
