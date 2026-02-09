@@ -17,11 +17,17 @@ const (
 	// CodexImage is the default image for OpenAI Codex agent.
 	CodexImage = "gjkim42/codex:latest"
 
+	// GeminiImage is the default image for Google Gemini CLI agent.
+	GeminiImage = "gjkim42/gemini:latest"
+
 	// AgentTypeClaudeCode is the agent type for Claude Code.
 	AgentTypeClaudeCode = "claude-code"
 
 	// AgentTypeCodex is the agent type for OpenAI Codex.
 	AgentTypeCodex = "codex"
+
+	// AgentTypeGemini is the agent type for Google Gemini CLI.
+	AgentTypeGemini = "gemini"
 
 	// GitCloneImage is the image used for cloning git repositories.
 	GitCloneImage = "alpine/git:v2.47.2"
@@ -48,6 +54,8 @@ type JobBuilder struct {
 	ClaudeCodeImagePullPolicy corev1.PullPolicy
 	CodexImage                string
 	CodexImagePullPolicy      corev1.PullPolicy
+	GeminiImage               string
+	GeminiImagePullPolicy     corev1.PullPolicy
 }
 
 // NewJobBuilder creates a new JobBuilder.
@@ -55,6 +63,7 @@ func NewJobBuilder() *JobBuilder {
 	return &JobBuilder{
 		ClaudeCodeImage: ClaudeCodeImage,
 		CodexImage:      CodexImage,
+		GeminiImage:     GeminiImage,
 	}
 }
 
@@ -65,6 +74,8 @@ func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.Work
 		return b.buildAgentJob(task, workspace, b.ClaudeCodeImage, b.ClaudeCodeImagePullPolicy)
 	case AgentTypeCodex:
 		return b.buildAgentJob(task, workspace, b.CodexImage, b.CodexImagePullPolicy)
+	case AgentTypeGemini:
+		return b.buildAgentJob(task, workspace, b.GeminiImage, b.GeminiImagePullPolicy)
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", task.Spec.Type)
 	}
@@ -78,6 +89,10 @@ func apiKeyEnvVar(agentType string) string {
 		// CODEX_API_KEY is the environment variable that codex exec reads
 		// for non-interactive authentication.
 		return "CODEX_API_KEY"
+	case AgentTypeGemini:
+		// GEMINI_API_KEY is the environment variable that the gemini CLI
+		// reads for API key authentication.
+		return "GEMINI_API_KEY"
 	default:
 		return "ANTHROPIC_API_KEY"
 	}
@@ -89,6 +104,8 @@ func oauthEnvVar(agentType string) string {
 	switch agentType {
 	case AgentTypeCodex:
 		return "CODEX_API_KEY"
+	case AgentTypeGemini:
+		return "GEMINI_API_KEY"
 	default:
 		return "CLAUDE_CODE_OAUTH_TOKEN"
 	}

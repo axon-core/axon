@@ -34,6 +34,8 @@ func main() {
 	var claudeCodeImagePullPolicy string
 	var codexImage string
 	var codexImagePullPolicy string
+	var geminiImage string
+	var geminiImagePullPolicy string
 	var spawnerImage string
 	var spawnerImagePullPolicy string
 
@@ -46,6 +48,8 @@ func main() {
 	flag.StringVar(&claudeCodeImagePullPolicy, "claude-code-image-pull-policy", "", "The image pull policy for Claude Code agent containers (e.g., Always, Never, IfNotPresent).")
 	flag.StringVar(&codexImage, "codex-image", controller.CodexImage, "The image to use for Codex agent containers.")
 	flag.StringVar(&codexImagePullPolicy, "codex-image-pull-policy", "", "The image pull policy for Codex agent containers (e.g., Always, Never, IfNotPresent).")
+	flag.StringVar(&geminiImage, "gemini-image", controller.GeminiImage, "The image to use for Gemini CLI agent containers.")
+	flag.StringVar(&geminiImagePullPolicy, "gemini-image-pull-policy", "", "The image pull policy for Gemini CLI agent containers (e.g., Always, Never, IfNotPresent).")
 	flag.StringVar(&spawnerImage, "spawner-image", controller.DefaultSpawnerImage, "The image to use for spawner Deployments.")
 	flag.StringVar(&spawnerImagePullPolicy, "spawner-image-pull-policy", "", "The image pull policy for spawner Deployments (e.g., Always, Never, IfNotPresent).")
 
@@ -73,6 +77,8 @@ func main() {
 	jobBuilder.ClaudeCodeImagePullPolicy = corev1.PullPolicy(claudeCodeImagePullPolicy)
 	jobBuilder.CodexImage = codexImage
 	jobBuilder.CodexImagePullPolicy = corev1.PullPolicy(codexImagePullPolicy)
+	jobBuilder.GeminiImage = geminiImage
+	jobBuilder.GeminiImagePullPolicy = corev1.PullPolicy(geminiImagePullPolicy)
 	if err = (&controller.TaskReconciler{
 		Client:     mgr.GetClient(),
 		Scheme:     mgr.GetScheme(),

@@ -176,7 +176,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.MarkFlagRequired("prompt")
 
 	_ = cmd.RegisterFlagCompletionFunc("credential-type", cobra.FixedCompletions([]string{"api-key", "oauth"}, cobra.ShellCompDirectiveNoFileComp))
-	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex", "gemini"}, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }
@@ -205,19 +205,27 @@ func watchTask(ctx context.Context, cl client.Client, name, namespace string) er
 // apiKeySecretKey returns the secret key name for API key credentials
 // based on the agent type.
 func apiKeySecretKey(agentType string) string {
-	if agentType == "codex" {
+	switch agentType {
+	case "codex":
 		return "CODEX_API_KEY"
+	case "gemini":
+		return "GEMINI_API_KEY"
+	default:
+		return "ANTHROPIC_API_KEY"
 	}
-	return "ANTHROPIC_API_KEY"
 }
 
 // oauthSecretKey returns the secret key name for OAuth credentials
 // based on the agent type.
 func oauthSecretKey(agentType string) string {
-	if agentType == "codex" {
+	switch agentType {
+	case "codex":
 		return "CODEX_API_KEY"
+	case "gemini":
+		return "GEMINI_API_KEY"
+	default:
+		return "CLAUDE_CODE_OAUTH_TOKEN"
 	}
-	return "CLAUDE_CODE_OAUTH_TOKEN"
 }
 
 // ensureCredentialSecret creates or updates a Secret with the given credential key and value.
