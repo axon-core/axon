@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/axon-core/axon/actions/workflows/ci.yaml/badge.svg)](https://github.com/axon-core/axon/actions/workflows/ci.yaml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/axon-core/axon)](https://github.com/axon-core/axon)
-[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 Axon is a Kubernetes controller that runs AI coding agents (Claude Code, OpenAI Codex, Google Gemini) in isolated, ephemeral Pods with full autonomy. You get the speed of unrestricted permissions without the risk — and the ability to fan out hundreds of agents in parallel across repos and CI pipelines.
 
@@ -495,4 +495,4 @@ For significant changes, please open an issue first to discuss the approach.
 
 ## License
 
-[Business Source License 1.1](LICENSE)
+[Apache License 2.0](LICENSE)
