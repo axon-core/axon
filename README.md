@@ -10,7 +10,7 @@ Axon is a Kubernetes controller that runs AI coding agents (Claude Code, OpenAI 
 
 ## Demo
 
-<!-- TODO: Replace with a GIF or asciinema recording -->
+Here is an example of running a task and streaming the logs:
 
 ```bash
 # 1. Initialize your config
@@ -242,6 +242,34 @@ kubectl apply -f taskspawner.yaml
 
 TaskSpawner polls for new issues matching your filters and creates a Task for each one.
 
+### Run tasks on a schedule (Cron)
+
+Create a TaskSpawner that runs on a cron schedule (e.g., every hour):
+
+```yaml
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: nightly-build-fix
+spec:
+  when:
+    cron:
+      schedule: "0 * * * *" # Run every hour
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-workspace
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: "Run the full test suite and fix any flakes."
+```
+
+```bash
+kubectl apply -f cron-spawner.yaml
+```
+
 ### Autonomous self-development pipeline
 
 This is a real-world TaskSpawner that picks up every open issue, investigates it, opens (or updates) a PR, self-reviews, and ensures CI passes — fully autonomously. When the agent can't make progress, it labels the issue `axon/needs-input` and stops. Remove the label to re-queue it.
@@ -310,7 +338,7 @@ The key pattern here is `excludeLabels: [axon/needs-input]` — this creates a f
 | `spec.credentials.type` | `api-key` or `oauth` | Yes |
 | `spec.credentials.secretRef.name` | Secret name with credentials | Yes |
 | `spec.model` | Model override (e.g., `claude-sonnet-4-20250514`) | No |
-| `spec.image` | Custom agent image override | No |
+| `spec.image` | Custom agent image override (see [Agent Image Interface](docs/agent-image-interface.md)) | No |
 | `spec.workspaceRef.name` | Name of a Workspace resource to use | No |
 | `spec.ttlSecondsAfterFinished` | Auto-delete task after N seconds (0 for immediate) | No |
 
@@ -336,10 +364,12 @@ The key pattern here is `excludeLabels: [axon/needs-input]` — this creates a f
 | `spec.when.githubIssues.labels` | Filter issues by labels | No |
 | `spec.when.githubIssues.excludeLabels` | Exclude issues with these labels | No |
 | `spec.when.githubIssues.state` | Filter by state: `open`, `closed`, `all` (default: `open`) | No |
+| `spec.when.githubIssues.types` | Filter by type: `issues`, `pulls` (default: `issues`) | No |
+| `spec.when.cron.schedule` | Cron schedule expression (e.g., `"0 * * * *"`) | Yes (when using cron) |
 | `spec.taskTemplate.type` | Agent type (`claude-code`, `codex`, or `gemini`) | Yes |
 | `spec.taskTemplate.credentials` | Credentials for the agent (same as Task) | Yes |
 | `spec.taskTemplate.model` | Model override | No |
-| `spec.taskTemplate.image` | Custom agent image override | No |
+| `spec.taskTemplate.image` | Custom agent image override (see [Agent Image Interface](docs/agent-image-interface.md)) | No |
 | `spec.taskTemplate.promptTemplate` | Go text/template for prompt (`{{.Title}}`, `{{.Body}}`, `{{.Number}}`, etc.) | No |
 | `spec.taskTemplate.ttlSecondsAfterFinished` | Auto-delete spawned tasks after N seconds | No |
 | `spec.pollInterval` | How often to poll the source (default: `5m`) | No |
@@ -440,41 +470,38 @@ If both `name` and `repo` are set, `name` takes precedence. The `--workspace` CL
 </details>
 
 <details>
-<summary><strong>CLI</strong></summary>
+<summary><strong>CLI Reference</strong></summary>
 
 The `axon` CLI lets you manage the full lifecycle without writing YAML.
 
-```bash
-# Install axon into a cluster
-axon install
+### Core Commands
 
-# Initialize a config file
-axon init
+| Command | Description |
+|---------|-------------|
+| `axon install` | Install Axon CRDs and controller into the cluster |
+| `axon uninstall` | Uninstall Axon from the cluster |
+| `axon init` | Initialize `~/.axon/config.yaml` |
+| `axon version` | Print version information |
 
-# Run a task
-axon run -p "Refactor auth to use JWT"
+### Resource Management
 
-# Run against a git repo (requires a Workspace resource)
-axon run -p "Add unit tests" --workspace my-workspace
+| Command | Description |
+|---------|-------------|
+| `axon run` | Create and run a new Task |
+| `axon create workspace` | Create a Workspace resource |
+| `axon create taskspawner` | Create a TaskSpawner resource |
+| `axon get <resource>` | List resources (`tasks`, `taskspawners`, `workspaces`) |
+| `axon delete <resource> <name>` | Delete a resource |
+| `axon logs <task-name> [-f]` | View or stream logs from a task |
 
-# Override config file defaults with CLI flags
-axon run -p "Fix bug" --secret other-secret --credential-type api-key
+### Common Flags
 
-# List tasks
-axon get tasks
-
-# List task spawners
-axon get taskspawners
-
-# View logs (follow mode)
-axon logs my-task -f
-
-# Delete a task
-axon delete task my-task
-
-# Uninstall axon from the cluster
-axon uninstall
-```
+- `--config`: Path to config file (default `~/.axon/config.yaml`)
+- `--namespace, -n`: Kubernetes namespace
+- `--kubeconfig`: Path to kubeconfig file
+- `--dry-run`: Print resources without creating them (supported by `run`, `create`, `install`)
+- `--output, -o`: Output format (`yaml` or `json`) (supported by `get`)
+- `--yes, -y`: Skip confirmation prompts
 
 </details>
 
