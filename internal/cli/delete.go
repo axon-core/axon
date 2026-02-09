@@ -33,7 +33,15 @@ func newDeleteTaskCommand(cfg *ClientConfig) *cobra.Command {
 		Use:     "task <name>",
 		Aliases: []string{"tasks"},
 		Short:   "Delete a task",
-		Args:    cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("task name is required\nUsage: %s", cmd.Use)
+			}
+			if len(args) > 1 {
+				return fmt.Errorf("too many arguments: expected 1 task name, got %d\nUsage: %s", len(args), cmd.Use)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, ns, err := cfg.NewClient()
 			if err != nil {
@@ -65,7 +73,15 @@ func newDeleteWorkspaceCommand(cfg *ClientConfig) *cobra.Command {
 		Use:     "workspace <name>",
 		Aliases: []string{"workspaces", "ws"},
 		Short:   "Delete a workspace",
-		Args:    cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("workspace name is required\nUsage: %s", cmd.Use)
+			}
+			if len(args) > 1 {
+				return fmt.Errorf("too many arguments: expected 1 workspace name, got %d\nUsage: %s", len(args), cmd.Use)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, ns, err := cfg.NewClient()
 			if err != nil {
@@ -97,7 +113,15 @@ func newDeleteTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 		Use:     "taskspawner <name>",
 		Aliases: []string{"taskspawners", "ts"},
 		Short:   "Delete a task spawner",
-		Args:    cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("task spawner name is required\nUsage: %s", cmd.Use)
+			}
+			if len(args) > 1 {
+				return fmt.Errorf("too many arguments: expected 1 task spawner name, got %d\nUsage: %s", len(args), cmd.Use)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, ns, err := cfg.NewClient()
 			if err != nil {

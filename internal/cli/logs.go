@@ -22,7 +22,15 @@ func newLogsCommand(cfg *ClientConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logs <name>",
 		Short: "View logs from a task's pod",
-		Args:  cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("task name is required\nUsage: %s", cmd.Use)
+			}
+			if len(args) > 1 {
+				return fmt.Errorf("too many arguments: expected 1 task name, got %d\nUsage: %s", len(args), cmd.Use)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, ns, err := cfg.NewClient()
 			if err != nil {
