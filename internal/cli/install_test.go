@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/axon-core/axon/internal/manifests"
@@ -160,20 +161,39 @@ func TestParseManifests_EmbeddedController(t *testing.T) {
 
 func TestInstallCommand_SkipsConfigLoading(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"install", "--config", "/nonexistent/path/config.yaml"})
+	cmd.SetArgs([]string{
+		"install",
+		"--config", "/nonexistent/path/config.yaml",
+		"--kubeconfig", "/nonexistent/path/kubeconfig",
+	})
 	err := cmd.Execute()
-	// We expect an error (no cluster), but not a config-loading error.
-	if err != nil && err.Error() == "loading config: open /nonexistent/path/config.yaml: no such file or directory" {
+	if err == nil {
+		t.Fatal("expected install to fail with invalid kubeconfig")
+	}
+	if err.Error() == "loading config: open /nonexistent/path/config.yaml: no such file or directory" {
 		t.Fatal("install should not fail on missing config file")
+	}
+	if !strings.Contains(err.Error(), "loading kubeconfig:") {
+		t.Fatalf("expected kubeconfig loading error, got %v", err)
 	}
 }
 
 func TestUninstallCommand_SkipsConfigLoading(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"uninstall", "--config", "/nonexistent/path/config.yaml"})
+	cmd.SetArgs([]string{
+		"uninstall",
+		"--config", "/nonexistent/path/config.yaml",
+		"--kubeconfig", "/nonexistent/path/kubeconfig",
+	})
 	err := cmd.Execute()
-	if err != nil && err.Error() == "loading config: open /nonexistent/path/config.yaml: no such file or directory" {
+	if err == nil {
+		t.Fatal("expected uninstall to fail with invalid kubeconfig")
+	}
+	if err.Error() == "loading config: open /nonexistent/path/config.yaml: no such file or directory" {
 		t.Fatal("uninstall should not fail on missing config file")
+	}
+	if !strings.Contains(err.Error(), "loading kubeconfig:") {
+		t.Fatalf("expected kubeconfig loading error, got %v", err)
 	}
 }
 
