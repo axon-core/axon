@@ -109,6 +109,11 @@ type TaskStatus struct {
 	// Message provides additional information about the current status.
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// Outputs contains URLs and references produced by the agent
+	// (e.g. branch names, PR URLs).
+	// +optional
+	Outputs []string `json:"outputs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

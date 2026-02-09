@@ -127,6 +127,13 @@ spec:
                 description: Message provides additional information about the current
                   status.
                 type: string
+              outputs:
+                description: |-
+                  Outputs contains URLs and references produced by the agent
+                  (e.g. branch names, PR URLs).
+                items:
+                  type: string
+                type: array
               phase:
                 description: Phase represents the current phase of the Task.
                 type: string

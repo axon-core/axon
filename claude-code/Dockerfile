@@ -32,6 +32,9 @@ RUN npm install -g @anthropic-ai/claude-code
 COPY claude-code/axon_entrypoint.sh /axon_entrypoint.sh
 RUN chmod +x /axon_entrypoint.sh
 
+COPY axon/capture-outputs.sh /axon/capture-outputs.sh
+RUN chmod +x /axon/capture-outputs.sh
+
 RUN useradd -u 61100 -m -s /bin/bash claude
 RUN mkdir -p /home/claude/.claude && chown -R claude:claude /home/claude
 

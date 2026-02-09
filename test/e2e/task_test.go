@@ -232,6 +232,88 @@ spec:
 	})
 })
 
+const outputsTaskName = "e2e-test-outputs-task"
+
+var _ = Describe("Task output capture", func() {
+	BeforeEach(func() {
+		By("cleaning up existing resources")
+		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
+		kubectl("delete", "task", outputsTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-outputs-workspace", "--ignore-not-found")
+	})
+
+	AfterEach(func() {
+		if CurrentSpecReport().Failed() {
+			By("collecting debug info on failure")
+			debugTask(outputsTaskName)
+		}
+
+		By("cleaning up test resources")
+		kubectl("delete", "task", outputsTaskName, "--ignore-not-found")
+		kubectl("delete", "workspace", "e2e-outputs-workspace", "--ignore-not-found")
+		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
+	})
+
+	It("should populate Outputs with branch name after task completes", func() {
+		By("creating OAuth credentials secret")
+		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
+			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+
+		By("creating a Workspace resource")
+		wsYAML := `apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: e2e-outputs-workspace
+spec:
+  repo: https://github.com/axon-core/axon.git
+  ref: main
+`
+		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("creating a Task with workspace ref")
+		taskYAML := `apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: ` + outputsTaskName + `
+spec:
+  type: claude-code
+  model: ` + testModel + `
+  prompt: "Run 'git branch --show-current' and print the output, then say done"
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-credentials
+  workspaceRef:
+    name: e2e-outputs-workspace
+`
+		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+
+		By("waiting for Job to be created")
+		Eventually(func() error {
+			return kubectlWithInput("", "get", "job", outputsTaskName)
+		}, 30*time.Second, time.Second).Should(Succeed())
+
+		By("waiting for Job to complete")
+		Eventually(func() error {
+			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+outputsTaskName, "--timeout=10s")
+		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+
+		By("verifying Task status is Succeeded")
+		output := kubectlOutput("get", "task", outputsTaskName, "-o", "jsonpath={.status.phase}")
+		Expect(output).To(Equal("Succeeded"))
+
+		By("verifying output markers appear in Pod logs")
+		logs := kubectlOutput("logs", "job/"+outputsTaskName)
+		Expect(logs).To(ContainSubstring("---AXON_OUTPUTS_START---"))
+		Expect(logs).To(ContainSubstring("---AXON_OUTPUTS_END---"))
+		Expect(logs).To(ContainSubstring("branch: main"))
+
+		By("verifying Outputs field is populated in Task status")
+		outputsJSON := kubectlOutput("get", "task", outputsTaskName, "-o", "jsonpath={.status.outputs}")
+		Expect(outputsJSON).To(ContainSubstring("branch: main"))
+	})
+})
+
 const githubTaskName = "e2e-test-github-task"
 
 var _ = Describe("Task with workspace and secretRef", func() {

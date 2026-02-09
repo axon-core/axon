@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -10,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,6 +23,13 @@ import (
 
 const (
 	taskFinalizer = "axon.io/finalizer"
+
+	// outputRetryWindow is the maximum duration after CompletionTime
+	// during which the controller retries reading Pod logs for outputs.
+	outputRetryWindow = 30 * time.Second
+
+	// outputRetryInterval is the delay between output capture retries.
+	outputRetryInterval = 5 * time.Second
 )
 
 // TaskReconciler reconciles a Task object.
@@ -28,6 +37,7 @@ type TaskReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
 	JobBuilder *JobBuilder
+	Clientset  kubernetes.Interface
 }
 
 // +kubebuilder:rbac:groups=axon.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
@@ -36,6 +46,7 @@ type TaskReconciler struct {
 // +kubebuilder:rbac:groups=axon.io,resources=workspaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
 
 // Reconcile handles Task reconciliation.
 func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -249,8 +260,32 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 	podNameChanged := podName != "" && task.Status.PodName != podName
 	phaseChanged := newPhase != ""
 
-	if !phaseChanged && !podNameChanged {
+	// Check if we should retry capturing outputs for an already-completed task
+	retryOutputs := !phaseChanged &&
+		len(task.Status.Outputs) == 0 &&
+		task.Status.CompletionTime != nil &&
+		time.Since(task.Status.CompletionTime.Time) < outputRetryWindow
+
+	if !phaseChanged && !podNameChanged && !retryOutputs {
 		return ctrl.Result{}, nil
+	}
+
+	// Read outputs from Pod logs when transitioning to a terminal phase
+	// or retrying capture for an already-completed task
+	var outputs []string
+	if setCompletionTime || retryOutputs {
+		effectivePodName := podName
+		if effectivePodName == "" {
+			effectivePodName = task.Status.PodName
+		}
+		containerName := task.Spec.Type
+		outputs = r.readOutputs(ctx, task.Namespace, effectivePodName, containerName)
+	}
+
+	// When retrying output capture, skip the status update if we still
+	// have nothing — just requeue to try again later.
+	if retryOutputs && outputs == nil {
+		return ctrl.Result{RequeueAfter: outputRetryInterval}, nil
 	}
 
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -269,12 +304,21 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 			}
 			if setCompletionTime {
 				task.Status.CompletionTime = &now
+				task.Status.Outputs = outputs
 			}
+		}
+		if retryOutputs && outputs != nil {
+			task.Status.Outputs = outputs
 		}
 		return r.Status().Update(ctx, task)
 	}); err != nil {
 		logger.Error(err, "Unable to update Task status")
 		return ctrl.Result{}, err
+	}
+
+	// Requeue to retry output capture when the initial attempt got nothing
+	if setCompletionTime && outputs == nil {
+		return ctrl.Result{RequeueAfter: outputRetryInterval}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -301,6 +345,34 @@ func (r *TaskReconciler) ttlExpired(task *axonv1alpha1.Task) (bool, time.Duratio
 		return true, 0
 	}
 	return false, remaining
+}
+
+// readOutputs reads Pod logs and extracts output markers.
+func (r *TaskReconciler) readOutputs(ctx context.Context, namespace, podName, container string) []string {
+	if r.Clientset == nil || podName == "" {
+		return nil
+	}
+	logger := log.FromContext(ctx)
+
+	var tailLines int64 = 50
+	req := r.Clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: container,
+		TailLines: &tailLines,
+	})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		logger.V(1).Info("Unable to read Pod logs for outputs", "pod", podName, "error", err)
+		return nil
+	}
+	defer stream.Close()
+
+	data, err := io.ReadAll(stream)
+	if err != nil {
+		logger.V(1).Info("Unable to read Pod log stream", "pod", podName, "error", err)
+		return nil
+	}
+
+	return ParseOutputs(string(data))
 }
 
 // SetupWithManager sets up the controller with the Manager.

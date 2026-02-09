@@ -165,6 +165,9 @@ var _ = Describe("Task Controller", func() {
 			By("Verifying Task has completion time")
 			Expect(createdTask.Status.CompletionTime).NotTo(BeNil())
 
+			By("Verifying Outputs field exists (empty in envtest, no real Pod logs)")
+			Expect(createdTask.Status.Outputs).To(BeEmpty())
+
 			By("Deleting the Task")
 			Expect(k8sClient.Delete(ctx, createdTask)).Should(Succeed())
 

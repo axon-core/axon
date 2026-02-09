@@ -57,6 +57,42 @@ When a workspace is configured, Axon mounts the cloned repository at
 `/workspace/repo` and sets `WorkingDir` on the container accordingly. The
 entrypoint script does not need to handle directory changes.
 
+## Output Capture
+
+After the agent exits, the entrypoint should run `/axon/capture-outputs.sh` to
+emit deterministic outputs (branch name, PR URLs) to stdout. The controller
+reads Pod logs and extracts lines between the following markers:
+
+```
+---AXON_OUTPUTS_START---
+branch: <branch-name>
+https://github.com/org/repo/pull/123
+---AXON_OUTPUTS_END---
+```
+
+The shared script `/axon/capture-outputs.sh` is included in all reference images
+and handles this automatically. Custom images should either:
+
+1. Include the script and call it after the agent exits, or
+2. Emit the markers directly from their entrypoint.
+
+The entrypoint must **not** use `exec` to run the agent, so that the capture
+step runs after the agent exits. Use the following pattern:
+
+```bash
+<agent> "${ARGS[@]}"
+AGENT_EXIT_CODE=$?
+
+/axon/capture-outputs.sh
+
+exit $AGENT_EXIT_CODE
+```
+
+Also use `set -uo pipefail` (without `-e`) so the capture script runs even if
+the agent exits non-zero.
+
+Captured outputs are stored in `TaskStatus.Outputs` and displayed by the CLI.
+
 ## Reference implementations
 
 - `claude-code/axon_entrypoint.sh` — wraps the `claude` CLI (Anthropic Claude Code).

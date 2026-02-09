@@ -52,6 +52,12 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	if t.Status.Message != "" {
 		printField(w, "Message", t.Status.Message)
 	}
+	if len(t.Status.Outputs) > 0 {
+		printField(w, "Outputs", t.Status.Outputs[0])
+		for _, o := range t.Status.Outputs[1:] {
+			fmt.Fprintf(w, "%-20s%s\n", "", o)
+		}
+	}
 }
 
 func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner) {

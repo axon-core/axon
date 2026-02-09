@@ -8,7 +8,7 @@
 #   - UID 61100: shared between git-clone init container and agent
 #   - Working directory: /workspace/repo when a workspace is configured
 
-set -euo pipefail
+set -uo pipefail
 
 PROMPT="${1:?Prompt argument is required}"
 
@@ -22,4 +22,9 @@ if [ -n "${AXON_MODEL:-}" ]; then
     ARGS+=("--model" "$AXON_MODEL")
 fi
 
-exec gemini "${ARGS[@]}"
+gemini "${ARGS[@]}"
+AGENT_EXIT_CODE=$?
+
+/axon/capture-outputs.sh
+
+exit $AGENT_EXIT_CODE

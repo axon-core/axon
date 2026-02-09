@@ -107,7 +107,7 @@ rules:
       - patch
       - update
       - watch
-  # Pods (for status)
+  # Pods (for status and log reading)
   - apiGroups:
       - ""
     resources:
@@ -116,6 +116,12 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
   # Secrets (for token mounting)
   - apiGroups:
       - ""
