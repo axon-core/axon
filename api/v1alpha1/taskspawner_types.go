@@ -88,7 +88,7 @@ type TaskTemplate struct {
 	WorkspaceRef *WorkspaceReference `json:"workspaceRef,omitempty"`
 
 	// PromptTemplate is a Go text/template for rendering the task prompt.
-	// Available variables: {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}.
+	// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
 	// +optional
 	PromptTemplate string `json:"promptTemplate,omitempty"`
 
