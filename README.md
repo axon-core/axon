@@ -392,10 +392,31 @@ The [`examples/`](examples/) directory contains self-contained, ready-to-apply Y
 | `spec.taskTemplate.credentials` | Credentials for the agent (same as Task) | Yes |
 | `spec.taskTemplate.model` | Model override | No |
 | `spec.taskTemplate.image` | Custom agent image override (see [Agent Image Interface](docs/agent-image-interface.md)) | No |
-| `spec.taskTemplate.promptTemplate` | Go text/template for prompt (`{{.Title}}`, `{{.Body}}`, `{{.Number}}`, etc.) | No |
+| `spec.taskTemplate.promptTemplate` | Go text/template for prompt (see [template variables](#prompttemplate-variables) below) | No |
 | `spec.taskTemplate.ttlSecondsAfterFinished` | Auto-delete spawned tasks after N seconds | No |
 | `spec.pollInterval` | How often to poll the source (default: `5m`) | No |
 | `spec.maxConcurrency` | Limit max concurrent running tasks | No |
+
+</details>
+
+<a id="prompttemplate-variables"></a>
+<details>
+<summary><strong>promptTemplate Variables</strong></summary>
+
+The `promptTemplate` field uses Go `text/template` syntax. Available variables depend on the source type:
+
+| Variable | Description | GitHub Issues | Cron |
+|----------|-------------|---------------|------|
+| `{{.ID}}` | Unique identifier | Issue/PR number as string (e.g., `"42"`) | Date-time string (e.g., `"20260207-0900"`) |
+| `{{.Number}}` | Issue or PR number | Issue/PR number (e.g., `42`) | `0` |
+| `{{.Title}}` | Title of the work item | Issue/PR title | Trigger time (RFC3339) |
+| `{{.Body}}` | Body text | Issue/PR body | Empty |
+| `{{.URL}}` | URL to the source item | GitHub HTML URL | Empty |
+| `{{.Labels}}` | Comma-separated labels | Issue/PR labels | Empty |
+| `{{.Comments}}` | Concatenated comments | Issue/PR comments | Empty |
+| `{{.Kind}}` | Type of work item | `"Issue"` or `"PR"` | `"Issue"` |
+| `{{.Time}}` | Trigger time (RFC3339) | Empty | Cron tick time (e.g., `"2026-02-07T09:00:00Z"`) |
+| `{{.Schedule}}` | Cron schedule expression | Empty | Schedule string (e.g., `"0 * * * *"`) |
 
 </details>
 

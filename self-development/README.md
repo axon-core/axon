@@ -139,7 +139,20 @@ To adapt these examples for your own repository:
 
 3. **Customize the prompt:**
    - Edit `spec.taskTemplate.promptTemplate` to match your workflow
-   - Available template variables: `{{.Number}}`, `{{.Title}}`, `{{.Body}}`, `{{.URL}}`, `{{.Comments}}`, `{{.Labels}}`, `{{.Kind}}`
+   - Available template variables (Go `text/template` syntax):
+
+   | Variable | Description | GitHub Issues | Cron |
+   |----------|-------------|---------------|------|
+   | `{{.ID}}` | Unique identifier for the work item | Issue/PR number as string (e.g., `"42"`) | Date-time string (e.g., `"20260207-0900"`) |
+   | `{{.Number}}` | Issue or PR number | Issue/PR number (e.g., `42`) | `0` |
+   | `{{.Title}}` | Title of the work item | Issue/PR title | Trigger time (RFC3339) |
+   | `{{.Body}}` | Body text of the work item | Issue/PR body | Empty |
+   | `{{.URL}}` | URL to the source item | GitHub HTML URL | Empty |
+   | `{{.Labels}}` | Comma-separated labels | Issue/PR labels | Empty |
+   | `{{.Comments}}` | Concatenated comments | Issue/PR comments | Empty |
+   | `{{.Kind}}` | Type of work item | `"Issue"` or `"PR"` | `"Issue"` |
+   | `{{.Time}}` | Trigger time (RFC3339) | Empty | Cron tick time (e.g., `"2026-02-07T09:00:00Z"`) |
+   | `{{.Schedule}}` | Cron schedule expression | Empty | Schedule string (e.g., `"0 * * * *"`) |
 
 4. **Set the polling interval:**
    ```yaml
