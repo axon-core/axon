@@ -12,9 +12,11 @@ const configTemplate = `# Axon configuration file
 # See: https://github.com/axon-core/axon
 
 # OAuth token (axon auto-creates the Kubernetes secret for you)
+# Get one by logging into https://claude.ai and extracting the sessionKey cookie
 oauthToken: ""
 
 # Or use an API key instead:
+# Get one at: https://console.anthropic.com/settings/keys
 # apiKey: ""
 
 # Agent type (optional, default: claude-code)
@@ -35,6 +37,7 @@ oauthToken: ""
 #   repo: https://github.com/org/repo.git
 #   ref: main
 #   token: ""  # GitHub token for git auth and gh CLI (optional)
+#                # Get one at: https://github.com/settings/tokens/new
 
 # Advanced: provide your own Kubernetes secret directly
 # secret: ""
