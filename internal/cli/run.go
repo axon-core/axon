@@ -195,9 +195,9 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "task prompt (required)")
-	cmd.Flags().StringVarP(&agentType, "type", "t", "claude-code", "agent type")
+	cmd.Flags().StringVarP(&agentType, "type", "t", "claude-code", "agent type (claude-code, codex, gemini)")
 	cmd.Flags().StringVar(&secret, "secret", "", "secret name with credentials (overrides oauthToken/apiKey in config)")
-	cmd.Flags().StringVar(&credentialType, "credential-type", "api-key", "credential type (api-key or oauth)")
+	cmd.Flags().StringVar(&credentialType, "credential-type", "api-key", "credential type (api-key, oauth)")
 	cmd.Flags().StringVar(&model, "model", "", "model override")
 	cmd.Flags().StringVar(&image, "image", "", "custom agent image (must implement agent image interface)")
 	cmd.Flags().StringVar(&name, "name", "", "task name (auto-generated if omitted)")

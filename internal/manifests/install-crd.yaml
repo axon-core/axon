@@ -97,6 +97,10 @@ spec:
                 type: integer
               type:
                 description: Type specifies the agent type (e.g., claude-code).
+                enum:
+                - claude-code
+                - codex
+                - gemini
                 type: string
               workspaceRef:
                 description: WorkspaceRef optionally references a Workspace resource
@@ -278,6 +282,10 @@ spec:
                     type: integer
                   type:
                     description: Type specifies the agent type (e.g., claude-code).
+                    enum:
+                    - claude-code
+                    - codex
+                    - gemini
                     type: string
                   workspaceRef:
                     description: |-
