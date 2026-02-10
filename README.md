@@ -15,7 +15,12 @@ Here is an example of running a task and streaming the logs:
 ```bash
 # 1. Initialize your config
 $ axon init
-# Edit ~/.axon/config.yaml with your token and workspace
+# Edit ~/.axon/config.yaml with your token and workspace:
+#   oauthToken: <your-oauth-token>
+#   workspace:
+#     repo: https://github.com/your-org/your-repo.git
+#     ref: main
+#     token: <github-token>
 
 # 2. Run a task against your repo
 $ axon run -p "Fix the bug described in issue #42 and open a PR with the fix"
