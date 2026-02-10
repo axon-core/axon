@@ -104,6 +104,25 @@ func TestFlagCompletionOutput(t *testing.T) {
 	}
 }
 
+func TestFlagCompletionAgentType(t *testing.T) {
+	root := NewRootCommand()
+
+	root.SetArgs([]string{"__complete", "run", "--type", ""})
+	out := &strings.Builder{}
+	root.SetOut(out)
+	root.Execute()
+
+	output := out.String()
+	for _, expected := range []string{"claude-code", "codex", "gemini"} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected %s in type completions, got %q", expected, output)
+		}
+	}
+	if !strings.Contains(output, ":4") {
+		t.Errorf("expected ShellCompDirectiveNoFileComp (:4) in output, got %q", output)
+	}
+}
+
 func TestFlagCompletionCredentialType(t *testing.T) {
 	root := NewRootCommand()
 

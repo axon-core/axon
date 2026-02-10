@@ -65,6 +65,49 @@ func TestRunCommand_DryRun(t *testing.T) {
 	}
 }
 
+func TestRunCommand_DryRun_AgentType(t *testing.T) {
+	for _, agentType := range []string{"claude-code", "codex", "gemini"} {
+		t.Run(agentType, func(t *testing.T) {
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(cfgPath, []byte("secret: my-secret\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := NewRootCommand()
+			cmd.SetArgs([]string{
+				"run",
+				"--config", cfgPath,
+				"--dry-run",
+				"--prompt", "hello",
+				"--name", "type-task",
+				"--namespace", "test-ns",
+				"--type", agentType,
+			})
+
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			if err := cmd.Execute(); err != nil {
+				w.Close()
+				os.Stdout = old
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			w.Close()
+			os.Stdout = old
+			var out bytes.Buffer
+			out.ReadFrom(r)
+			output := out.String()
+
+			if !strings.Contains(output, "type: "+agentType) {
+				t.Errorf("expected YAML output to contain 'type: %s', got:\n%s", agentType, output)
+			}
+		})
+	}
+}
+
 func TestRunCommand_DryRun_WithWorkspaceConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
