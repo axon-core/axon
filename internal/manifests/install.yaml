@@ -238,6 +238,10 @@ spec:
           image: gjkim42/axon-controller:latest
           args:
             - --leader-elect
+            - --claude-code-image=gjkim42/claude-code:latest
+            - --codex-image=gjkim42/codex:latest
+            - --gemini-image=gjkim42/gemini:latest
+            - --spawner-image=gjkim42/axon-spawner:latest
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

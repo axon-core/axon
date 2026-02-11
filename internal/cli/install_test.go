@@ -270,6 +270,39 @@ func TestVersionedManifest_EmbeddedController(t *testing.T) {
 	}
 }
 
+func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
+	original := version.Version
+	defer func() { version.Version = original }()
+
+	// Verify the embedded manifest contains image flags that will be versioned.
+	expectedArgs := []string{
+		"--claude-code-image=gjkim42/claude-code:",
+		"--codex-image=gjkim42/codex:",
+		"--gemini-image=gjkim42/gemini:",
+		"--spawner-image=gjkim42/axon-spawner:",
+	}
+	for _, arg := range expectedArgs {
+		if !bytes.Contains(manifests.InstallController, []byte(arg)) {
+			t.Errorf("expected embedded controller manifest to contain %q", arg)
+		}
+	}
+
+	// Verify all image args get the pinned version after substitution.
+	version.Version = "v0.3.0"
+	result := versionedManifest(manifests.InstallController)
+	versionedArgs := []string{
+		"--claude-code-image=gjkim42/claude-code:v0.3.0",
+		"--codex-image=gjkim42/codex:v0.3.0",
+		"--gemini-image=gjkim42/gemini:v0.3.0",
+		"--spawner-image=gjkim42/axon-spawner:v0.3.0",
+	}
+	for _, arg := range versionedArgs {
+		if !bytes.Contains(result, []byte(arg)) {
+			t.Errorf("expected versioned manifest to contain %q", arg)
+		}
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"version"})
