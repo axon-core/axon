@@ -12,6 +12,8 @@ import (
 )
 
 func newGetCommand(cfg *ClientConfig) *cobra.Command {
+	var allNamespaces bool
+
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "Get resources",
@@ -21,14 +23,16 @@ func newGetCommand(cfg *ClientConfig) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newGetTaskCommand(cfg))
-	cmd.AddCommand(newGetTaskSpawnerCommand(cfg))
-	cmd.AddCommand(newGetWorkspaceCommand(cfg))
+	cmd.PersistentFlags().BoolVarP(&allNamespaces, "all-namespaces", "A", false, "List resources across all namespaces")
+
+	cmd.AddCommand(newGetTaskCommand(cfg, &allNamespaces))
+	cmd.AddCommand(newGetTaskSpawnerCommand(cfg, &allNamespaces))
+	cmd.AddCommand(newGetWorkspaceCommand(cfg, &allNamespaces))
 
 	return cmd
 }
 
-func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
+func newGetTaskSpawnerCommand(cfg *ClientConfig, allNamespaces *bool) *cobra.Command {
 	var output string
 
 	cmd := &cobra.Command{
@@ -39,6 +43,10 @@ func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if output != "" && output != "yaml" && output != "json" {
 				return fmt.Errorf("unknown output format %q: must be one of yaml, json", output)
+			}
+
+			if *allNamespaces && len(args) == 1 {
+				return fmt.Errorf("a resource cannot be retrieved by name across all namespaces")
 			}
 
 			cl, ns, err := cfg.NewClient()
@@ -67,7 +75,11 @@ func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 			}
 
 			tsList := &axonv1alpha1.TaskSpawnerList{}
-			if err := cl.List(ctx, tsList, client.InNamespace(ns)); err != nil {
+			var listOpts []client.ListOption
+			if !*allNamespaces {
+				listOpts = append(listOpts, client.InNamespace(ns))
+			}
+			if err := cl.List(ctx, tsList, listOpts...); err != nil {
 				return fmt.Errorf("listing task spawners: %w", err)
 			}
 
@@ -78,7 +90,7 @@ func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 			case "json":
 				return printJSON(os.Stdout, tsList)
 			default:
-				printTaskSpawnerTable(os.Stdout, tsList.Items)
+				printTaskSpawnerTable(os.Stdout, tsList.Items, *allNamespaces)
 				return nil
 			}
 		},
@@ -92,7 +104,7 @@ func newGetTaskSpawnerCommand(cfg *ClientConfig) *cobra.Command {
 	return cmd
 }
 
-func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
+func newGetTaskCommand(cfg *ClientConfig, allNamespaces *bool) *cobra.Command {
 	var output string
 
 	cmd := &cobra.Command{
@@ -103,6 +115,10 @@ func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if output != "" && output != "yaml" && output != "json" {
 				return fmt.Errorf("unknown output format %q: must be one of yaml, json", output)
+			}
+
+			if *allNamespaces && len(args) == 1 {
+				return fmt.Errorf("a resource cannot be retrieved by name across all namespaces")
 			}
 
 			cl, ns, err := cfg.NewClient()
@@ -131,7 +147,11 @@ func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
 			}
 
 			taskList := &axonv1alpha1.TaskList{}
-			if err := cl.List(ctx, taskList, client.InNamespace(ns)); err != nil {
+			var listOpts []client.ListOption
+			if !*allNamespaces {
+				listOpts = append(listOpts, client.InNamespace(ns))
+			}
+			if err := cl.List(ctx, taskList, listOpts...); err != nil {
 				return fmt.Errorf("listing tasks: %w", err)
 			}
 
@@ -142,7 +162,7 @@ func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
 			case "json":
 				return printJSON(os.Stdout, taskList)
 			default:
-				printTaskTable(os.Stdout, taskList.Items)
+				printTaskTable(os.Stdout, taskList.Items, *allNamespaces)
 				return nil
 			}
 		},
@@ -156,7 +176,7 @@ func newGetTaskCommand(cfg *ClientConfig) *cobra.Command {
 	return cmd
 }
 
-func newGetWorkspaceCommand(cfg *ClientConfig) *cobra.Command {
+func newGetWorkspaceCommand(cfg *ClientConfig, allNamespaces *bool) *cobra.Command {
 	var output string
 
 	cmd := &cobra.Command{
@@ -167,6 +187,10 @@ func newGetWorkspaceCommand(cfg *ClientConfig) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if output != "" && output != "yaml" && output != "json" {
 				return fmt.Errorf("unknown output format %q: must be one of yaml, json", output)
+			}
+
+			if *allNamespaces && len(args) == 1 {
+				return fmt.Errorf("a resource cannot be retrieved by name across all namespaces")
 			}
 
 			cl, ns, err := cfg.NewClient()
@@ -195,7 +219,11 @@ func newGetWorkspaceCommand(cfg *ClientConfig) *cobra.Command {
 			}
 
 			wsList := &axonv1alpha1.WorkspaceList{}
-			if err := cl.List(ctx, wsList, client.InNamespace(ns)); err != nil {
+			var listOpts []client.ListOption
+			if !*allNamespaces {
+				listOpts = append(listOpts, client.InNamespace(ns))
+			}
+			if err := cl.List(ctx, wsList, listOpts...); err != nil {
 				return fmt.Errorf("listing workspaces: %w", err)
 			}
 
@@ -206,7 +234,7 @@ func newGetWorkspaceCommand(cfg *ClientConfig) *cobra.Command {
 			case "json":
 				return printJSON(os.Stdout, wsList)
 			default:
-				printWorkspaceTable(os.Stdout, wsList.Items)
+				printWorkspaceTable(os.Stdout, wsList.Items, *allNamespaces)
 				return nil
 			}
 		},

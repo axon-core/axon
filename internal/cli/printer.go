@@ -13,12 +13,20 @@ import (
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
 )
 
-func printTaskTable(w io.Writer, tasks []axonv1alpha1.Task) {
+func printTaskTable(w io.Writer, tasks []axonv1alpha1.Task, allNamespaces bool) {
 	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTYPE\tPHASE\tAGE")
+	if allNamespaces {
+		fmt.Fprintln(tw, "NAMESPACE\tNAME\tTYPE\tPHASE\tAGE")
+	} else {
+		fmt.Fprintln(tw, "NAME\tTYPE\tPHASE\tAGE")
+	}
 	for _, t := range tasks {
 		age := duration.HumanDuration(time.Since(t.CreationTimestamp.Time))
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", t.Name, t.Spec.Type, t.Status.Phase, age)
+		if allNamespaces {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Namespace, t.Name, t.Spec.Type, t.Status.Phase, age)
+		} else {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", t.Name, t.Spec.Type, t.Status.Phase, age)
+		}
 	}
 	tw.Flush()
 }
@@ -60,9 +68,13 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	}
 }
 
-func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner) {
+func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner, allNamespaces bool) {
 	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tSOURCE\tPHASE\tDISCOVERED\tTASKS\tAGE")
+	if allNamespaces {
+		fmt.Fprintln(tw, "NAMESPACE\tNAME\tSOURCE\tPHASE\tDISCOVERED\tTASKS\tAGE")
+	} else {
+		fmt.Fprintln(tw, "NAME\tSOURCE\tPHASE\tDISCOVERED\tTASKS\tAGE")
+	}
 	for _, s := range spawners {
 		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
 		source := ""
@@ -75,9 +87,15 @@ func printTaskSpawnerTable(w io.Writer, spawners []axonv1alpha1.TaskSpawner) {
 		} else if s.Spec.When.Cron != nil {
 			source = "cron: " + s.Spec.When.Cron.Schedule
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
-			s.Name, source, s.Status.Phase,
-			s.Status.TotalDiscovered, s.Status.TotalTasksCreated, age)
+		if allNamespaces {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
+				s.Namespace, s.Name, source, s.Status.Phase,
+				s.Status.TotalDiscovered, s.Status.TotalTasksCreated, age)
+		} else {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
+				s.Name, source, s.Status.Phase,
+				s.Status.TotalDiscovered, s.Status.TotalTasksCreated, age)
+		}
 	}
 	tw.Flush()
 }
@@ -123,12 +141,20 @@ func printTaskSpawnerDetail(w io.Writer, ts *axonv1alpha1.TaskSpawner) {
 	}
 }
 
-func printWorkspaceTable(w io.Writer, workspaces []axonv1alpha1.Workspace) {
+func printWorkspaceTable(w io.Writer, workspaces []axonv1alpha1.Workspace, allNamespaces bool) {
 	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tREPO\tREF\tAGE")
+	if allNamespaces {
+		fmt.Fprintln(tw, "NAMESPACE\tNAME\tREPO\tREF\tAGE")
+	} else {
+		fmt.Fprintln(tw, "NAME\tREPO\tREF\tAGE")
+	}
 	for _, ws := range workspaces {
 		age := duration.HumanDuration(time.Since(ws.CreationTimestamp.Time))
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", ws.Name, ws.Spec.Repo, ws.Spec.Ref, age)
+		if allNamespaces {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ws.Namespace, ws.Name, ws.Spec.Repo, ws.Spec.Ref, age)
+		} else {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", ws.Name, ws.Spec.Repo, ws.Spec.Ref, age)
+		}
 	}
 	tw.Flush()
 }
