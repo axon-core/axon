@@ -1111,11 +1111,19 @@ func TestBuildJob_PodOverridesEnvBuiltinPrecedence(t *testing.T) {
 
 	container := job.Spec.Template.Spec.Containers[0]
 
-	// The built-in AXON_MODEL should appear first.
-	// Kubernetes uses the first occurrence for duplicates.
-	if container.Env[0].Name != "AXON_MODEL" || container.Env[0].Value != "claude-sonnet-4-20250514" {
-		t.Errorf("Expected first AXON_MODEL env to be built-in value, got name=%q value=%q",
-			container.Env[0].Name, container.Env[0].Value)
+	// User env vars that collide with built-in names should be filtered out
+	// so that built-in vars always take precedence.
+	var axonModelCount int
+	for _, e := range container.Env {
+		if e.Name == "AXON_MODEL" {
+			axonModelCount++
+			if e.Value != "claude-sonnet-4-20250514" {
+				t.Errorf("Expected AXON_MODEL value %q, got %q", "claude-sonnet-4-20250514", e.Value)
+			}
+		}
+	}
+	if axonModelCount != 1 {
+		t.Errorf("Expected exactly 1 AXON_MODEL env var, got %d", axonModelCount)
 	}
 }
 

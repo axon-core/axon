@@ -278,10 +278,17 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 		}
 
 		if len(po.Env) > 0 {
-			// Append user env vars after built-in vars. Kubernetes uses
-			// the first occurrence when there are duplicates, so built-in
-			// vars take precedence.
-			mainContainer.Env = append(mainContainer.Env, po.Env...)
+			// Filter out user env vars that collide with built-in names
+			// so that built-in vars always take precedence.
+			builtinNames := make(map[string]struct{}, len(mainContainer.Env))
+			for _, e := range mainContainer.Env {
+				builtinNames[e.Name] = struct{}{}
+			}
+			for _, e := range po.Env {
+				if _, exists := builtinNames[e.Name]; !exists {
+					mainContainer.Env = append(mainContainer.Env, e)
+				}
+			}
 		}
 
 		if po.NodeSelector != nil {

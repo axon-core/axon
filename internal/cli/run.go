@@ -200,7 +200,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				}
 				for _, e := range envFlags {
 					parts := strings.SplitN(e, "=", 2)
-					if len(parts) != 2 {
+					if len(parts) != 2 || parts[0] == "" {
 						return fmt.Errorf("invalid --env value %q: must be NAME=VALUE", e)
 					}
 					po.Env = append(po.Env, corev1.EnvVar{
