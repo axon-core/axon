@@ -1,10 +1,10 @@
-# Self-Development Examples
+# Self-Development Orchestration Patterns
 
-This directory contains real-world TaskSpawner configurations used by the Axon project itself for autonomous development.
+This directory contains real-world orchestration patterns used by the Axon project itself for autonomous development.
 
 ## Overview
 
-These TaskSpawners demonstrate how to set up fully autonomous AI agents that:
+These TaskSpawners demonstrate how to orchestrate fully autonomous AI workers that:
 - Monitor GitHub issues
 - Investigate and fix problems
 - Create or update pull requests

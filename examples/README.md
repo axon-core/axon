@@ -1,7 +1,6 @@
-# Axon Examples
+# Axon Orchestration Examples
 
-Copy-paste-ready YAML manifests for common Axon use cases. Each example is
-self-contained and includes all required resources (Secrets, Workspaces, Tasks).
+Ready-to-use patterns and YAML manifests for orchestrating AI agents with Axon. These examples demonstrate how to combine Tasks, Workspaces, and TaskSpawners into functional AI workflows.
 
 ## Prerequisites
 

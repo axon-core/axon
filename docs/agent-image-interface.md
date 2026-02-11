@@ -1,13 +1,13 @@
-# Agent Image Interface
+# Standardized Agent Interface
 
 This document describes the interface that custom agent images must implement
-to be compatible with Axon.
+to be compatible with the Axon orchestration framework.
 
 ## Overview
 
-Axon runs agent tasks as Kubernetes Jobs. Each agent container is invoked using
-a standard interface so that any compatible image can be used as a drop-in
-replacement for the default `claude-code` image.
+Axon orchestrates agent tasks as Kubernetes Jobs. By providing a standardized
+execution interface, Axon allows any compatible image to be used as a drop-in
+replacement for the default agents.
 
 ## Requirements
 

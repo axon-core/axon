@@ -1,12 +1,20 @@
 # Axon
 
-**Run autonomous AI agents safely — at scale, in CI, on Kubernetes.**
+**The Kubernetes-native framework for orchestrating autonomous AI coding agents.**
 
 [![CI](https://github.com/axon-core/axon/actions/workflows/ci.yaml/badge.svg)](https://github.com/axon-core/axon/actions/workflows/ci.yaml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/axon-core/axon)](https://github.com/axon-core/axon)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Axon is a Kubernetes controller that runs AI coding agents (Claude Code, OpenAI Codex, Google Gemini) in isolated, ephemeral Pods with full autonomy. You get the speed of unrestricted permissions without the risk — and the ability to fan out hundreds of agents in parallel across repos and CI pipelines.
+Axon is an orchestration framework that turns AI coding agents into scalable, autonomous Kubernetes workloads. By providing a standardized interface for agents (Claude Code, OpenAI Codex, Google Gemini) and powerful orchestration primitives, Axon allows you to build complex, self-healing AI development pipelines that run with full autonomy in isolated, ephemeral Pods.
+
+## Framework Core
+
+Axon is built on three main primitives that enable sophisticated agent orchestration:
+
+1.  **Tasks**: Ephemeral units of work that wrap an AI agent run.
+2.  **Workspaces**: Persistent or ephemeral environments (git repos) where agents operate.
+3.  **TaskSpawners**: Orchestration engines that react to external triggers (GitHub, Cron) to automatically manage agent lifecycles.
 
 ## Demo
 
@@ -27,27 +35,27 @@ See [Examples](#examples) for a full autonomous self-development pipeline.
 
 ## Why Axon?
 
-AI coding agents are most powerful when they run fully autonomous — no permission prompts, no human in the loop. But on your laptop, that means the agent can touch your filesystem, network, and everything else on the host. And there's no easy way to fan out dozens of agents across repos or plug them into CI.
+AI coding agents are evolving from interactive CLI tools into autonomous background workers. Axon provides the necessary infrastructure to manage this transition at scale.
 
-**Kubernetes solves both problems at once.** Inside a Pod, "dangerously skip permissions" isn't dangerous anymore — the agent gets full autonomy *within* an isolated, ephemeral container while the blast radius stays at zero for the host.
-
-- **Safe autonomy** — agents run with `--dangerously-skip-permissions` inside isolated, ephemeral Pods. Full speed, zero risk to the host.
-- **Scale out** — launch hundreds of agents in parallel across repositories. Kubernetes handles scheduling and resource management.
-- **CI-native** — trigger agents from any pipeline. A Task is just a Kubernetes resource — create it with `kubectl`, Helm, Argo, or your own tooling.
-- **Observable** — watch agents move through `Pending → Running → Succeeded/Failed` with kubectl.
-- **Simple** — a handful of CRDs, one controller, zero dependencies beyond a running cluster.
+- **Orchestration, not just execution** — Don't just run an agent; manage its entire lifecycle. Use `TaskSpawner` to build event-driven AI workers that react to GitHub issues, PRs, or schedules.
+- **Safe autonomy** — Agents run with `--dangerously-skip-permissions` inside isolated, ephemeral Pods. They get full speed and autonomy within a zero-risk blast radius for your host and infrastructure.
+- **Standardized Interface** — Plug in any agent (Claude, Codex, Gemini, or your own) using a simple container interface. Axon handles the Kubernetes plumbing, credential injection, and workspace management.
+- **Massive Parallelism** — Fan out hundreds of agents across multiple repositories. Kubernetes handles the scheduling, resource management, and queueing.
+- **Observable & CI-Native** — Every agent run is a first-class Kubernetes resource. Monitor progress via `kubectl`, integrate with ArgoCD, or trigger via GitHub Actions.
 
 ## How It Works
 
+Axon orchestrates the flow from external events to autonomous execution:
+
 ```
- Task: refactor auth ──┐                ┌──▶ Isolated Pod ──▶ Succeeded
-                       ├──▶  Axon  ─────┼──▶ Isolated Pod ──▶ Succeeded
- Task: add tests ──────┤                └──▶ Isolated Pod ──▶ Failed
-                       │
- Task: update docs ────┘
+  Triggers (GitHub, Cron) ──┐
+                            │
+  Manual (CLI, YAML) ───────┼──▶  TaskSpawner  ──▶  Tasks  ──▶  Isolated Pods
+                            │          │              │             │
+  API (CI/CD, Webhooks) ────┘          └─(Lifecycle)──┴─(Execution)─┴─(Success/Fail)
 ```
 
-You apply a Task, Axon runs it as an isolated Job with full autonomy, and tracks it through `Pending → Running → Succeeded/Failed`. Currently supported agents: **Claude Code**, **OpenAI Codex**, and **Google Gemini**.
+You define what needs to be done, and Axon handles the "how" — from cloning the right repo and injecting credentials to running the agent and capturing its outputs (like PR URLs and branch names).
 
 <details>
 <summary>TaskSpawner — Automatic Task Creation from External Sources</summary>
@@ -297,33 +305,28 @@ The key pattern here is `excludeLabels: [axon/needs-input]` — this creates a f
 
 The [`examples/`](examples/) directory contains self-contained, ready-to-apply YAML manifests for common use cases — from a simple Task with an API key to a full TaskSpawner driven by GitHub Issues or a cron schedule. Each example includes all required resources and clear `# TODO:` placeholders.
 
-## Features
+## Framework Capabilities
 
-| Feature | Details |
+| Capability | Details |
 |---------|---------|
-| Safe Autonomy | Agents run with `--dangerously-skip-permissions` inside isolated, ephemeral Pods |
-| Scale Out | Run hundreds of agents in parallel — Kubernetes handles scheduling |
-| CI-Native | Trigger agents from any pipeline via `kubectl`, Helm, Argo, or your own tooling |
-| Git Workspace | Clone a repo into the agent's working directory via a Workspace resource, with optional `GITHUB_TOKEN` for private repos and PR creation |
-| Config File | Set token, model, namespace, and workspace in `~/.axon/config.yaml` — secrets are auto-created |
-| TaskSpawner | Automatically create Tasks from GitHub Issues (or other sources) via a long-running spawner |
-| CLI | `axon install`, `axon uninstall`, `axon init`, `axon run`, `axon get`, `axon logs`, `axon delete` — manage the full lifecycle without writing YAML |
-| Full Lifecycle | `Pending` → `Running` → `Succeeded` / `Failed` |
-| Owner References | Delete a Task and its Job + Pod are automatically cleaned up |
-| Credential Management | API key and OAuth supported via Kubernetes Secrets |
-| Model Selection | Override the default model per-task with `spec.model` |
-| Status Tracking | Job name, pod name, start/completion times, and messages |
-| Leader Election | Safe multi-replica deployment out of the box |
-| Minimal Footprint | Distroless container, 10m CPU / 64Mi memory requests |
-| Extensible | Pluggable agent type — add new agents via the `switch` in `job_builder.go` |
+| **Event-Driven** | Automatically spawn Tasks from GitHub Issues, PRs, or Cron schedules using `TaskSpawner`. |
+| **Pluggable Agents** | Bring any agent (Claude, Codex, Gemini) or your own custom image by implementing a simple shell interface. |
+| **Safe Autonomy** | Run agents with full system access inside isolated, ephemeral Pods with zero risk to the host. |
+| **Workspace Isolation** | Each run gets a dedicated, freshly cloned git workspace with automated credential injection. |
+| **Standardized Outputs** | Axon captures deterministic outputs (branch names, PR URLs) from agent runs into Kubernetes status. |
+| **Lifecycle Management** | Built-in TTL management, owner references, and automatic cleanup of finished runs. |
+| **Infrastructure Scale** | Fan out hundreds of agents. Kubernetes handles scheduling, resource limits (CPU/MEM), and priorities. |
+| **Credential Safety** | Securely manage API keys and OAuth tokens using Kubernetes Secrets, injected only when needed. |
+| **Observable** | Track agent progress through `Pending` → `Running` → `Succeeded`/`Failed` using standard K8s tools. |
+| **CLI & YAML** | Manage the entire lifecycle via the `axon` CLI or declarative YAML manifests (GitOps ready). |
 
-## Use Cases
+## Orchestration Patterns
 
-- **Hands-free CI** — let an autonomous agent generate, refactor, or fix code as a pipeline step, with no permission prompts blocking the run.
-- **Batch refactoring at scale** — spin up dozens of agents in parallel to apply the same prompt across microservices, each safely isolated in its own Pod.
-- **Scheduled maintenance** — pair with a CronJob or workflow engine to run recurring code-health agents on a schedule.
-- **Developer self-service** — expose agent execution through an internal portal so any developer can run a fully autonomous AI agent without local setup.
-- **AI in your internal platform** — embed Axon as the execution layer for AI-powered features in your developer platform.
+- **Autonomous Self-Development** — Build a feedback loop where agents pick up issues, write code, self-review, and fix CI flakes until the task is complete.
+- **Event-Driven Bug Fixing** — Automatically spawn agents to investigate and fix bugs as soon as they are labeled in GitHub.
+- **Fleet-Wide Refactoring** — Orchestrate a "fan-out" where dozens of agents apply the same refactoring pattern across a fleet of microservices in parallel.
+- **Hands-Free CI/CD** — Embed agents as first-class steps in your deployment pipelines to generate documentation or perform automated migrations.
+- **AI Worker Pools** — Maintain a pool of specialized agents (e.g., "The Security Fixer") that developers can trigger via simple Kubernetes resources.
 
 ## Reference
 
