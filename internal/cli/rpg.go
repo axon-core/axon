@@ -191,7 +191,7 @@ func (s *RPGState) Render(width, height int) string {
 	b.WriteString(s.renderHeroLine(fw))
 	b.WriteString(rpgMidBorder(fw))
 
-	// Stages block (stageCount + 2 lines)
+	// Stages block (stageCount + 3 lines: empty + stages + empty + mid border)
 	b.WriteString(rpgEmptyLine(fw))
 	for i := 0; i < int(stageCount); i++ {
 		b.WriteString(s.renderStageLine(fw, i))
@@ -200,7 +200,7 @@ func (s *RPGState) Render(width, height int) string {
 	b.WriteString(rpgMidBorder(fw))
 
 	// Battle log: header (1 line) + entries + bottom border (1 line)
-	fixedLines := 5 + 3 + int(stageCount) + 2 + 1 + 1
+	fixedLines := 5 + 3 + int(stageCount) + 3 + 1 + 1
 	availLog := height - fixedLines
 	if availLog < 1 {
 		availLog = 1

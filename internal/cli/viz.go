@@ -47,13 +47,13 @@ or watch an existing task.
   axon viz --demo           Run a simulated demo (no cluster needed)`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !term.IsTerminal(int(os.Stdout.Fd())) {
+				return fmt.Errorf("viz requires a terminal (stdout is not a TTY)")
+			}
+
 			// Demo mode: simulate a full task lifecycle without a cluster.
 			if demo {
 				return runVizDemo()
-			}
-
-			if !term.IsTerminal(int(os.Stdout.Fd())) {
-				return fmt.Errorf("viz requires a terminal (stdout is not a TTY)")
 			}
 
 			ctx := context.Background()
@@ -430,55 +430,69 @@ func vizStreamLogs(ctx context.Context, cs *kubernetes.Clientset, ns, podName, a
 func vizStreamRawLogs(ctx context.Context, cs *kubernetes.Clientset, ns, podName, container string, state *RPGState) {
 	opts := &corev1.PodLogOptions{Follow: true, Container: container}
 	for {
-		stream, err := cs.CoreV1().Pods(ns).GetLogs(podName, opts).Stream(ctx)
-		if err != nil {
+		if err := vizStreamRawLogsOnce(ctx, cs, ns, podName, opts, state); err != nil {
 			if isContainerNotReady(err) {
 				sleepCtx(ctx, 2*time.Second)
 				continue
-			}
-			return
-		}
-		defer stream.Close()
-
-		scanner := bufio.NewScanner(stream)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if line != "" {
-				state.AddBattle(BattleEntry{Type: "status", Content: line})
 			}
 		}
 		return
 	}
 }
 
+// vizStreamRawLogsOnce opens a single log stream and reads it to completion.
+func vizStreamRawLogsOnce(ctx context.Context, cs *kubernetes.Clientset, ns, podName string, opts *corev1.PodLogOptions, state *RPGState) error {
+	stream, err := cs.CoreV1().Pods(ns).GetLogs(podName, opts).Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			state.AddBattle(BattleEntry{Type: "status", Content: line})
+		}
+	}
+	return nil
+}
+
 // vizStreamAgentLogs streams NDJSON agent logs and parses them into battle entries.
 func vizStreamAgentLogs(ctx context.Context, cs *kubernetes.Clientset, ns, podName, agentType string, state *RPGState) {
 	opts := &corev1.PodLogOptions{Follow: true, Container: agentType}
 	for {
-		stream, err := cs.CoreV1().Pods(ns).GetLogs(podName, opts).Stream(ctx)
-		if err != nil {
+		if err := vizStreamAgentLogsOnce(ctx, cs, ns, podName, agentType, opts, state); err != nil {
 			if isContainerNotReady(err) {
 				sleepCtx(ctx, 2*time.Second)
 				continue
 			}
-			return
-		}
-		defer stream.Close()
-
-		scanner := bufio.NewScanner(stream)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			for _, entry := range vizParseLogEvents(agentType, line, state) {
-				state.AddBattle(entry)
-			}
 		}
 		return
 	}
+}
+
+// vizStreamAgentLogsOnce opens a single agent log stream and reads it to completion.
+func vizStreamAgentLogsOnce(ctx context.Context, cs *kubernetes.Clientset, ns, podName, agentType string, opts *corev1.PodLogOptions, state *RPGState) error {
+	stream, err := cs.CoreV1().Pods(ns).GetLogs(podName, opts).Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		for _, entry := range vizParseLogEvents(agentType, line, state) {
+			state.AddBattle(entry)
+		}
+	}
+	return nil
 }
 
 // --- Log event parsers ---
