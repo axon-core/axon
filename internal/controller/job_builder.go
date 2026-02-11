@@ -267,6 +267,39 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 		mainContainer.WorkingDir = WorkspaceMountPath + "/repo"
 	}
 
+	// Apply PodOverrides before constructing the Job so all overrides
+	// are reflected in the final spec.
+	var activeDeadlineSeconds *int64
+	var nodeSelector map[string]string
+
+	if po := task.Spec.PodOverrides; po != nil {
+		if po.Resources != nil {
+			mainContainer.Resources = *po.Resources
+		}
+
+		if po.ActiveDeadlineSeconds != nil {
+			activeDeadlineSeconds = po.ActiveDeadlineSeconds
+		}
+
+		if len(po.Env) > 0 {
+			// Filter out user env vars that collide with built-in names
+			// so that built-in vars always take precedence.
+			builtinNames := make(map[string]struct{}, len(mainContainer.Env))
+			for _, e := range mainContainer.Env {
+				builtinNames[e.Name] = struct{}{}
+			}
+			for _, e := range po.Env {
+				if _, exists := builtinNames[e.Name]; !exists {
+					mainContainer.Env = append(mainContainer.Env, e)
+				}
+			}
+		}
+
+		if po.NodeSelector != nil {
+			nodeSelector = po.NodeSelector
+		}
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      task.Name,
@@ -279,7 +312,8 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 			},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &backoffLimit,
+			BackoffLimit:          &backoffLimit,
+			ActiveDeadlineSeconds: activeDeadlineSeconds,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -295,6 +329,7 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 					InitContainers:  initContainers,
 					Volumes:         volumes,
 					Containers:      []corev1.Container{mainContainer},
+					NodeSelector:    nodeSelector,
 				},
 			},
 		},

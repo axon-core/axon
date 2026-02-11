@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -44,6 +45,30 @@ type Credentials struct {
 	SecretRef SecretReference `json:"secretRef"`
 }
 
+// PodOverrides defines optional overrides for the agent pod.
+type PodOverrides struct {
+	// Resources defines resource limits and requests for the agent container.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ActiveDeadlineSeconds specifies the maximum duration in seconds
+	// that the agent pod can run before being terminated.
+	// This is set on the Job's activeDeadlineSeconds field.
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	ActiveDeadlineSeconds *int64 `json:"activeDeadlineSeconds,omitempty"`
+
+	// Env specifies additional environment variables for the agent container.
+	// These are appended after the built-in env vars (credentials, model, GitHub token).
+	// If a user-specified env var conflicts with a built-in one, the built-in takes precedence.
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// NodeSelector constrains agent pods to nodes matching the given labels.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+}
+
 // TaskSpec defines the desired state of Task.
 type TaskSpec struct {
 	// Type specifies the agent type (e.g., claude-code).
@@ -83,6 +108,10 @@ type TaskSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// PodOverrides allows customizing the agent pod configuration.
+	// +optional
+	PodOverrides *PodOverrides `json:"podOverrides,omitempty"`
 }
 
 // TaskStatus defines the observed state of Task.

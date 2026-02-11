@@ -103,6 +103,10 @@ type TaskTemplate struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
+
+	// PodOverrides allows customizing the agent pod configuration for spawned Tasks.
+	// +optional
+	PodOverrides *PodOverrides `json:"podOverrides,omitempty"`
 }
 
 // TaskSpawnerSpec defines the desired state of TaskSpawner.

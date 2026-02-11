@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -341,5 +342,54 @@ func TestRunCycleWithSource_ActiveTasksStatusUpdated(t *testing.T) {
 	// 1 existing running + 1 new = 2 active
 	if updatedTS.Status.ActiveTasks != 2 {
 		t.Errorf("Expected activeTasks=2, got %d", updatedTS.Status.ActiveTasks)
+	}
+}
+
+func int64Ptr(v int64) *int64 { return &v }
+
+func TestRunCycleWithSource_PodOverridesForwarded(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.TaskTemplate.PodOverrides = &axonv1alpha1.PodOverrides{
+		ActiveDeadlineSeconds: int64Ptr(1800),
+		Env: []corev1.EnvVar{
+			{Name: "HTTP_PROXY", Value: "http://proxy:8080"},
+		},
+		NodeSelector: map[string]string{
+			"pool": "agents",
+		},
+	}
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Verify the created Task has PodOverrides forwarded from the TaskTemplate.
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 1 {
+		t.Fatalf("Expected 1 task, got %d", len(taskList.Items))
+	}
+
+	task := taskList.Items[0]
+	if task.Spec.PodOverrides == nil {
+		t.Fatal("Expected PodOverrides to be forwarded to spawned Task")
+	}
+	if task.Spec.PodOverrides.ActiveDeadlineSeconds == nil || *task.Spec.PodOverrides.ActiveDeadlineSeconds != 1800 {
+		t.Errorf("Expected ActiveDeadlineSeconds 1800, got %v", task.Spec.PodOverrides.ActiveDeadlineSeconds)
+	}
+	if len(task.Spec.PodOverrides.Env) != 1 || task.Spec.PodOverrides.Env[0].Name != "HTTP_PROXY" {
+		t.Errorf("Expected env HTTP_PROXY to be forwarded, got %v", task.Spec.PodOverrides.Env)
+	}
+	if task.Spec.PodOverrides.NodeSelector["pool"] != "agents" {
+		t.Errorf("Expected nodeSelector pool=agents, got %v", task.Spec.PodOverrides.NodeSelector)
 	}
 }

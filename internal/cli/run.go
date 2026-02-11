@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,6 +31,8 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 		workspace      string
 		dryRun         bool
 		yes            bool
+		timeout        string
+		envFlags       []string
 	)
 
 	cmd := &cobra.Command{
@@ -175,6 +178,41 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				}
 			}
 
+			// Build PodOverrides from --timeout and --env flags.
+			var po *axonv1alpha1.PodOverrides
+			if timeout != "" {
+				d, err := time.ParseDuration(timeout)
+				if err != nil {
+					return fmt.Errorf("invalid --timeout value %q: %w", timeout, err)
+				}
+				secs := int64(d.Seconds())
+				if secs < 1 {
+					return fmt.Errorf("--timeout must be at least 1s")
+				}
+				if po == nil {
+					po = &axonv1alpha1.PodOverrides{}
+				}
+				po.ActiveDeadlineSeconds = &secs
+			}
+			if len(envFlags) > 0 {
+				if po == nil {
+					po = &axonv1alpha1.PodOverrides{}
+				}
+				for _, e := range envFlags {
+					parts := strings.SplitN(e, "=", 2)
+					if len(parts) != 2 || parts[0] == "" {
+						return fmt.Errorf("invalid --env value %q: must be NAME=VALUE", e)
+					}
+					po.Env = append(po.Env, corev1.EnvVar{
+						Name:  parts[0],
+						Value: parts[1],
+					})
+				}
+			}
+			if po != nil {
+				task.Spec.PodOverrides = po
+			}
+
 			task.SetGroupVersionKind(axonv1alpha1.GroupVersion.WithKind("Task"))
 
 			if dryRun {
@@ -205,6 +243,8 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().BoolVarP(&watch, "watch", "w", false, "watch task status after creation")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the resource that would be created without submitting it")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip confirmation prompts")
+	cmd.Flags().StringVar(&timeout, "timeout", "", "maximum execution time for the agent (e.g. 30m, 1h)")
+	cmd.Flags().StringArrayVar(&envFlags, "env", nil, "additional environment variables for the agent (NAME=VALUE)")
 
 	cmd.MarkFlagRequired("prompt")
 
