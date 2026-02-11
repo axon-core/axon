@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -935,5 +937,330 @@ func TestBuildClaudeCodeJob_UnsupportedType(t *testing.T) {
 	_, err := builder.Build(task, nil)
 	if err == nil {
 		t.Fatal("Expected error for unsupported agent type, got nil")
+	}
+}
+
+func int64Ptr(v int64) *int64 { return &v }
+
+func TestBuildJob_PodOverridesResources(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-resources",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				Resources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+						corev1.ResourceCPU:    resource.MustParse("500m"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("2Gi"),
+						corev1.ResourceCPU:    resource.MustParse("2"),
+					},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	memReq := container.Resources.Requests[corev1.ResourceMemory]
+	if memReq.String() != "512Mi" {
+		t.Errorf("Expected memory request 512Mi, got %s", memReq.String())
+	}
+	cpuReq := container.Resources.Requests[corev1.ResourceCPU]
+	if cpuReq.String() != "500m" {
+		t.Errorf("Expected CPU request 500m, got %s", cpuReq.String())
+	}
+	memLimit := container.Resources.Limits[corev1.ResourceMemory]
+	if memLimit.String() != "2Gi" {
+		t.Errorf("Expected memory limit 2Gi, got %s", memLimit.String())
+	}
+	cpuLimit := container.Resources.Limits[corev1.ResourceCPU]
+	if cpuLimit.String() != "2" {
+		t.Errorf("Expected CPU limit 2, got %s", cpuLimit.String())
+	}
+}
+
+func TestBuildJob_PodOverridesActiveDeadlineSeconds(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deadline",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				ActiveDeadlineSeconds: int64Ptr(1800),
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	if job.Spec.ActiveDeadlineSeconds == nil {
+		t.Fatal("Expected ActiveDeadlineSeconds to be set")
+	}
+	if *job.Spec.ActiveDeadlineSeconds != 1800 {
+		t.Errorf("Expected ActiveDeadlineSeconds 1800, got %d", *job.Spec.ActiveDeadlineSeconds)
+	}
+}
+
+func TestBuildJob_PodOverridesEnv(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-env",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			Model: "claude-sonnet-4-20250514",
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				Env: []corev1.EnvVar{
+					{Name: "HTTP_PROXY", Value: "http://proxy:8080"},
+					{Name: "NO_PROXY", Value: "localhost"},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	// User env vars should be present.
+	if envMap["HTTP_PROXY"] != "http://proxy:8080" {
+		t.Errorf("Expected HTTP_PROXY=http://proxy:8080, got %q", envMap["HTTP_PROXY"])
+	}
+	if envMap["NO_PROXY"] != "localhost" {
+		t.Errorf("Expected NO_PROXY=localhost, got %q", envMap["NO_PROXY"])
+	}
+
+	// Built-in env vars should still be present.
+	if envMap["AXON_MODEL"] != "claude-sonnet-4-20250514" {
+		t.Errorf("Expected AXON_MODEL to still be set, got %q", envMap["AXON_MODEL"])
+	}
+}
+
+func TestBuildJob_PodOverridesEnvBuiltinPrecedence(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-env-precedence",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			Model: "claude-sonnet-4-20250514",
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				Env: []corev1.EnvVar{
+					// Attempt to override a built-in env var.
+					{Name: "AXON_MODEL", Value: "should-not-take-effect"},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// The built-in AXON_MODEL should appear first.
+	// Kubernetes uses the first occurrence for duplicates.
+	if container.Env[0].Name != "AXON_MODEL" || container.Env[0].Value != "claude-sonnet-4-20250514" {
+		t.Errorf("Expected first AXON_MODEL env to be built-in value, got name=%q value=%q",
+			container.Env[0].Name, container.Env[0].Value)
+	}
+}
+
+func TestBuildJob_PodOverridesNodeSelector(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-node-selector",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				NodeSelector: map[string]string{
+					"workload-type": "ai-agent",
+					"gpu":           "true",
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	ns := job.Spec.Template.Spec.NodeSelector
+	if ns == nil {
+		t.Fatal("Expected NodeSelector to be set")
+	}
+	if ns["workload-type"] != "ai-agent" {
+		t.Errorf("Expected nodeSelector workload-type=ai-agent, got %q", ns["workload-type"])
+	}
+	if ns["gpu"] != "true" {
+		t.Errorf("Expected nodeSelector gpu=true, got %q", ns["gpu"])
+	}
+}
+
+func TestBuildJob_PodOverridesAllFields(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-all-overrides",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCodex,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
+			},
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse("4Gi"),
+					},
+				},
+				ActiveDeadlineSeconds: int64Ptr(3600),
+				Env: []corev1.EnvVar{
+					{Name: "HTTPS_PROXY", Value: "http://proxy:8080"},
+				},
+				NodeSelector: map[string]string{
+					"pool": "agents",
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Resources
+	memLimit := container.Resources.Limits[corev1.ResourceMemory]
+	if memLimit.String() != "4Gi" {
+		t.Errorf("Expected memory limit 4Gi, got %s", memLimit.String())
+	}
+
+	// ActiveDeadlineSeconds
+	if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 3600 {
+		t.Errorf("Expected ActiveDeadlineSeconds 3600, got %v", job.Spec.ActiveDeadlineSeconds)
+	}
+
+	// Env
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	if envMap["HTTPS_PROXY"] != "http://proxy:8080" {
+		t.Errorf("Expected HTTPS_PROXY=http://proxy:8080, got %q", envMap["HTTPS_PROXY"])
+	}
+
+	// NodeSelector
+	if job.Spec.Template.Spec.NodeSelector["pool"] != "agents" {
+		t.Errorf("Expected nodeSelector pool=agents, got %q", job.Spec.Template.Spec.NodeSelector["pool"])
+	}
+}
+
+func TestBuildJob_NoPodOverrides(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-no-overrides",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// No resources should be set.
+	if len(container.Resources.Requests) != 0 || len(container.Resources.Limits) != 0 {
+		t.Error("Expected no resources to be set when PodOverrides is nil")
+	}
+
+	// No ActiveDeadlineSeconds.
+	if job.Spec.ActiveDeadlineSeconds != nil {
+		t.Error("Expected no ActiveDeadlineSeconds when PodOverrides is nil")
+	}
+
+	// No NodeSelector.
+	if job.Spec.Template.Spec.NodeSelector != nil {
+		t.Error("Expected no NodeSelector when PodOverrides is nil")
 	}
 }
