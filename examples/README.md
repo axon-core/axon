@@ -15,6 +15,9 @@ Ready-to-use patterns and YAML manifests for orchestrating AI agents with Axon. 
 | [02-task-with-workspace](02-task-with-workspace/) | Run a Task that clones a git repo and can create PRs |
 | [03-taskspawner-github-issues](03-taskspawner-github-issues/) | Automatically create Tasks from labeled GitHub issues |
 | [04-taskspawner-cron](04-taskspawner-cron/) | Run agent tasks on a cron schedule |
+| [05-pr-review-spawner](05-pr-review-spawner/) | Auto-review PRs with a label-driven TaskSpawner and AgentConfig |
+| [06-multi-repo-migration](06-multi-repo-migration/) | Apply the same migration across multiple repos in parallel |
+| [07-security-audit-cron](07-security-audit-cron/) | Run periodic security audits with findings filed as issues |
 
 ## How to Use
 

@@ -1,0 +1,9 @@
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: review-workspace
+spec:
+  repo: https://github.com/your-org/your-repo.git # TODO: replace with your repo
+  ref: main
+  secretRef:
+    name: github-token

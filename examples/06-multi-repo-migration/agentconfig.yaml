@@ -1,0 +1,15 @@
+apiVersion: axon.io/v1alpha1
+kind: AgentConfig
+metadata:
+  name: migration-config
+spec:
+  agentsMD: |
+    You are performing a fleet-wide migration. Follow the migration
+    instructions exactly and do not make unrelated changes. If the
+    migration does not apply to this repo (e.g., the dependency is not
+    used), exit without creating a PR.
+
+    After making changes:
+    1. Run the project's test suite to verify nothing is broken.
+    2. Create a PR with a clear title prefixed with "[Migration]".
+    3. Include a summary of what changed and why in the PR description.

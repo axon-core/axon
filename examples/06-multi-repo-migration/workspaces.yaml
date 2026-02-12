@@ -1,0 +1,29 @@
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: service-a
+spec:
+  repo: https://github.com/your-org/service-a.git # TODO: replace
+  ref: main
+  secretRef:
+    name: github-token
+---
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: service-b
+spec:
+  repo: https://github.com/your-org/service-b.git # TODO: replace
+  ref: main
+  secretRef:
+    name: github-token
+---
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: service-c
+spec:
+  repo: https://github.com/your-org/service-c.git # TODO: replace
+  ref: main
+  secretRef:
+    name: github-token

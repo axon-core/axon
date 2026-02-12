@@ -1,0 +1,41 @@
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: security-audit
+spec:
+  when:
+    cron:
+      schedule: "0 9 * * 1" # Every Monday at 9:00 AM UTC
+  maxConcurrency: 1
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: audit-workspace
+    agentConfigRef:
+      name: security-audit-config
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: |
+      Run a security audit of this repository.
+
+      Steps:
+      1. Check for hardcoded secrets (grep for patterns like API keys, tokens,
+         passwords in source files — not test fixtures or examples).
+      2. Review dependency files (go.mod, package.json, requirements.txt, etc.)
+         for known vulnerabilities. Use available tools if present (e.g.,
+         `go vuln check`, `npm audit`).
+      3. Scan for injection vulnerabilities in code that handles user input.
+      4. Check configuration files for insecure defaults.
+
+      If you find issues:
+      - Create ONE summary GitHub issue titled "[Security Audit] Findings - {{.Time}}"
+        with all findings organized by severity.
+      - Label it with "security" and "audit".
+      - Example: gh issue create --title "[Security Audit] Findings - {{.Time}}" --body "<findings>" --label security --label audit
+
+      If no issues are found:
+      - Exit cleanly without creating any issues.
+      - Do not create "all clear" issues.
+    ttlSecondsAfterFinished: 3600
