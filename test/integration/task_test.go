@@ -57,7 +57,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a hello world program",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -210,7 +210,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a hello world program",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeOAuth,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "claude-oauth",
@@ -289,7 +289,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Fix the bug",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -412,7 +412,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a PR",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -519,7 +519,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Review the code",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -596,7 +596,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a hello world program",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -678,7 +678,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a hello world program",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -749,7 +749,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Create a hello world program",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -840,7 +840,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Fix the bug",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -950,7 +950,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Fix the bug",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -1045,7 +1045,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "codex",
 					Prompt: "Fix the bug",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "codex-api-key",
@@ -1152,7 +1152,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "codex",
 					Prompt: "Refactor the module",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "codex-api-key",
@@ -1232,7 +1232,7 @@ var _ = Describe("Task Controller", func() {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   "claude-code",
 					Prompt: "Fix the bug",
-					Credentials: axonv1alpha1.Credentials{
+					Credentials: &axonv1alpha1.Credentials{
 						Type: axonv1alpha1.CredentialTypeAPIKey,
 						SecretRef: axonv1alpha1.SecretReference{
 							Name: "anthropic-api-key",
@@ -1283,6 +1283,152 @@ var _ = Describe("Task Controller", func() {
 				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("When creating a Task with custom agent type", func() {
+		It("Should create a Job using the custom image without credentials", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-custom-type",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Task with custom type and image, no credentials")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-custom-type",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "custom",
+					Prompt: "Run custom agent",
+					Image:  "my-custom-agent:v1",
+					Model:  "custom-model",
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the custom image is used with uniform interface")
+			container := createdJob.Spec.Template.Spec.Containers[0]
+			Expect(container.Image).To(Equal("my-custom-agent:v1"))
+			Expect(container.Command).To(Equal([]string{"/axon_entrypoint.sh"}))
+			Expect(container.Args).To(Equal([]string{"Run custom agent"}))
+			Expect(container.Name).To(Equal("custom"))
+
+			By("Verifying AXON_MODEL is set and no credential env vars")
+			Expect(container.Env).To(HaveLen(1))
+			Expect(container.Env[0].Name).To(Equal("AXON_MODEL"))
+			Expect(container.Env[0].Value).To(Equal("custom-model"))
+		})
+
+		It("Should create a Job with custom type and workspace", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-custom-type-ws",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with GITHUB_TOKEN")
+			ghSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "github-token",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"GITHUB_TOKEN": "test-gh-token",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ghSecret)).Should(Succeed())
+
+			By("Creating a Workspace resource")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+					SecretRef: &axonv1alpha1.SecretReference{
+						Name: "github-token",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with custom type, image, and workspace")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-custom-type-ws",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "custom",
+					Prompt: "Run custom in workspace",
+					Image:  "my-custom-agent:v2",
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobLookupKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the custom image with workspace setup")
+			container := createdJob.Spec.Template.Spec.Containers[0]
+			Expect(container.Image).To(Equal("my-custom-agent:v2"))
+			Expect(container.Command).To(Equal([]string{"/axon_entrypoint.sh"}))
+			Expect(container.WorkingDir).To(Equal("/workspace/repo"))
+			Expect(container.VolumeMounts).To(HaveLen(1))
+
+			By("Verifying workspace env vars (GITHUB_TOKEN, GH_TOKEN) but no credential env vars")
+			envMap := map[string]string{}
+			for _, env := range container.Env {
+				if env.Value != "" {
+					envMap[env.Name] = env.Value
+				} else {
+					envMap[env.Name] = "(from-secret)"
+				}
+			}
+			Expect(envMap).To(HaveKey("GITHUB_TOKEN"))
+			Expect(envMap).To(HaveKey("GH_TOKEN"))
+			Expect(envMap).NotTo(HaveKey("ANTHROPIC_API_KEY"))
+			Expect(envMap).NotTo(HaveKey("CODEX_API_KEY"))
+			Expect(envMap).NotTo(HaveKey("GEMINI_API_KEY"))
+
+			By("Verifying init container runs as shared UID")
+			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := createdJob.Spec.Template.Spec.InitContainers[0]
+			Expect(initContainer.SecurityContext.RunAsUser).NotTo(BeNil())
+			Expect(*initContainer.SecurityContext.RunAsUser).To(Equal(controller.AgentUID))
 		})
 	})
 })

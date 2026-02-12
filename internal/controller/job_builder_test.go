@@ -20,7 +20,7 @@ func TestBuildClaudeCodeJob_DefaultImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Hello world",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -75,7 +75,7 @@ func TestBuildClaudeCodeJob_CustomImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -131,7 +131,7 @@ func TestBuildClaudeCodeJob_NoModel(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Hello",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -163,7 +163,7 @@ func TestBuildClaudeCodeJob_WorkspaceWithRef(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -230,7 +230,7 @@ func TestBuildClaudeCodeJob_CustomImageWithWorkspace(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -309,7 +309,7 @@ func TestBuildClaudeCodeJob_WorkspaceWithSecretRefPersistsCredentialHelper(t *te
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -358,7 +358,7 @@ func TestBuildClaudeCodeJob_EnterpriseWorkspaceSetsGHHostAndEnterpriseToken(t *t
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -433,7 +433,7 @@ func TestBuildClaudeCodeJob_GithubComWorkspaceUsesGHToken(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -486,7 +486,7 @@ func TestBuildCodexJob_DefaultImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeCodex,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
 			},
@@ -570,7 +570,7 @@ func TestBuildCodexJob_CustomImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeCodex,
 			Prompt: "Refactor the module",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
 			},
@@ -606,7 +606,7 @@ func TestBuildCodexJob_WithWorkspace(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeCodex,
 			Prompt: "Fix the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
 			},
@@ -678,7 +678,7 @@ func TestBuildCodexJob_OAuthCredentials(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeCodex,
 			Prompt: "Review the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeOAuth,
 				SecretRef: axonv1alpha1.SecretReference{Name: "codex-oauth"},
 			},
@@ -727,7 +727,7 @@ func TestBuildGeminiJob_DefaultImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeGemini,
 			Prompt: "Fix the bug",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "gemini-secret"},
 			},
@@ -814,7 +814,7 @@ func TestBuildGeminiJob_CustomImage(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeGemini,
 			Prompt: "Refactor the module",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "gemini-secret"},
 			},
@@ -850,7 +850,7 @@ func TestBuildGeminiJob_WithWorkspace(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeGemini,
 			Prompt: "Fix the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "gemini-secret"},
 			},
@@ -925,7 +925,7 @@ func TestBuildGeminiJob_OAuthCredentials(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeGemini,
 			Prompt: "Review the code",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeOAuth,
 				SecretRef: axonv1alpha1.SecretReference{Name: "gemini-oauth"},
 			},
@@ -977,7 +977,7 @@ func TestBuildClaudeCodeJob_UnsupportedType(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   "unsupported-agent",
 			Prompt: "Hello",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1002,7 +1002,7 @@ func TestBuildJob_PodOverridesResources(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1056,7 +1056,7 @@ func TestBuildJob_PodOverridesActiveDeadlineSeconds(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1089,7 +1089,7 @@ func TestBuildJob_PodOverridesEnv(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1140,7 +1140,7 @@ func TestBuildJob_PodOverridesEnvBuiltinPrecedence(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1187,7 +1187,7 @@ func TestBuildJob_PodOverridesNodeSelector(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1227,7 +1227,7 @@ func TestBuildJob_PodOverridesAllFields(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeCodex,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
 			},
@@ -1293,7 +1293,7 @@ func TestBuildJob_NoPodOverrides(t *testing.T) {
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   AgentTypeClaudeCode,
 			Prompt: "Fix issue",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeAPIKey,
 				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
 			},
@@ -1320,5 +1320,257 @@ func TestBuildJob_NoPodOverrides(t *testing.T) {
 	// No NodeSelector.
 	if job.Spec.Template.Spec.NodeSelector != nil {
 		t.Error("Expected no NodeSelector when PodOverrides is nil")
+	}
+}
+
+func TestBuildCustomJob_WithImage(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCustom,
+			Prompt: "Run my custom agent",
+			Image:  "my-custom-agent:v1",
+			Model:  "custom-model",
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Custom image should be used.
+	if container.Image != "my-custom-agent:v1" {
+		t.Errorf("Expected image %q, got %q", "my-custom-agent:v1", container.Image)
+	}
+
+	// Container name should be "custom".
+	if container.Name != AgentTypeCustom {
+		t.Errorf("Expected container name %q, got %q", AgentTypeCustom, container.Name)
+	}
+
+	// Command should be /axon_entrypoint.sh (uniform interface).
+	if len(container.Command) != 1 || container.Command[0] != "/axon_entrypoint.sh" {
+		t.Errorf("Expected command [/axon_entrypoint.sh], got %v", container.Command)
+	}
+
+	// Args should be just the prompt.
+	if len(container.Args) != 1 || container.Args[0] != "Run my custom agent" {
+		t.Errorf("Expected args [Run my custom agent], got %v", container.Args)
+	}
+
+	// AXON_MODEL should be set.
+	foundAxonModel := false
+	for _, env := range container.Env {
+		if env.Name == "AXON_MODEL" {
+			foundAxonModel = true
+			if env.Value != "custom-model" {
+				t.Errorf("AXON_MODEL value: expected %q, got %q", "custom-model", env.Value)
+			}
+		}
+	}
+	if !foundAxonModel {
+		t.Error("Expected AXON_MODEL env var to be set")
+	}
+
+	// No credential env vars should be set when credentials is nil.
+	for _, env := range container.Env {
+		if env.Name == "ANTHROPIC_API_KEY" || env.Name == "CODEX_API_KEY" || env.Name == "GEMINI_API_KEY" || env.Name == "CLAUDE_CODE_OAUTH_TOKEN" {
+			t.Errorf("Expected no credential env var, but found %q", env.Name)
+		}
+	}
+}
+
+func TestBuildCustomJob_WithCredentials(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom-cred",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCustom,
+			Prompt: "Run my custom agent",
+			Image:  "my-custom-agent:v1",
+			Credentials: &axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	if container.Image != "my-custom-agent:v1" {
+		t.Errorf("Expected image %q, got %q", "my-custom-agent:v1", container.Image)
+	}
+
+	// When credentials are provided for custom type, ANTHROPIC_API_KEY should
+	// be set (default fallback for unknown agent types).
+	foundKey := false
+	for _, env := range container.Env {
+		if env.Name == "ANTHROPIC_API_KEY" {
+			foundKey = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Error("Expected ANTHROPIC_API_KEY to reference a secret")
+			} else if env.ValueFrom.SecretKeyRef.Name != "my-secret" {
+				t.Errorf("Expected secret name %q, got %q", "my-secret", env.ValueFrom.SecretKeyRef.Name)
+			}
+		}
+	}
+	if !foundKey {
+		t.Error("Expected ANTHROPIC_API_KEY env var to be set when credentials are provided for custom type")
+	}
+}
+
+func TestBuildCustomJob_MissingImage(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom-no-image",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCustom,
+			Prompt: "Run my custom agent",
+		},
+	}
+
+	_, err := builder.Build(task, nil)
+	if err == nil {
+		t.Fatal("Expected error for custom agent type without image, got nil")
+	}
+	if !strings.Contains(err.Error(), "image is required") {
+		t.Errorf("Expected error about image being required, got: %v", err)
+	}
+}
+
+func TestBuildCustomJob_WithWorkspace(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom-ws",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCustom,
+			Prompt: "Run in workspace",
+			Image:  "my-custom-agent:v1",
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		Ref:  "main",
+		SecretRef: &axonv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// Custom image should be used with workspace.
+	if container.Image != "my-custom-agent:v1" {
+		t.Errorf("Expected image %q, got %q", "my-custom-agent:v1", container.Image)
+	}
+
+	// Should have workspace volume mount and working dir.
+	if container.WorkingDir != WorkspaceMountPath+"/repo" {
+		t.Errorf("Expected workingDir %q, got %q", WorkspaceMountPath+"/repo", container.WorkingDir)
+	}
+	if len(container.VolumeMounts) != 1 {
+		t.Fatalf("Expected 1 volume mount, got %d", len(container.VolumeMounts))
+	}
+
+	// Should have GITHUB_TOKEN and GH_TOKEN (no credential env vars).
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		} else {
+			envMap[env.Name] = "(from-secret)"
+		}
+	}
+	for _, name := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if _, ok := envMap[name]; !ok {
+			t.Errorf("Expected env var %q to be set", name)
+		}
+	}
+
+	// No credential env vars should be set.
+	for _, name := range []string{"ANTHROPIC_API_KEY", "CODEX_API_KEY", "GEMINI_API_KEY"} {
+		if _, ok := envMap[name]; ok {
+			t.Errorf("Expected no %q env var for custom type without credentials", name)
+		}
+	}
+
+	// Verify init container and FSGroup.
+	if len(job.Spec.Template.Spec.InitContainers) != 1 {
+		t.Fatalf("Expected 1 init container, got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+	initContainer := job.Spec.Template.Spec.InitContainers[0]
+	if initContainer.SecurityContext == nil || initContainer.SecurityContext.RunAsUser == nil {
+		t.Fatal("Expected init container SecurityContext.RunAsUser to be set")
+	}
+	if *initContainer.SecurityContext.RunAsUser != AgentUID {
+		t.Errorf("Expected RunAsUser %d, got %d", AgentUID, *initContainer.SecurityContext.RunAsUser)
+	}
+}
+
+func TestBuildCustomJob_WithPodOverridesEnv(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom-env",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCustom,
+			Prompt: "Run with env",
+			Image:  "my-custom-agent:v1",
+			PodOverrides: &axonv1alpha1.PodOverrides{
+				Env: []corev1.EnvVar{
+					{Name: "MY_API_KEY", Value: "test-key"},
+					{Name: "CUSTOM_VAR", Value: "custom-value"},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	// User env vars should be present.
+	if envMap["MY_API_KEY"] != "test-key" {
+		t.Errorf("Expected MY_API_KEY=test-key, got %q", envMap["MY_API_KEY"])
+	}
+	if envMap["CUSTOM_VAR"] != "custom-value" {
+		t.Errorf("Expected CUSTOM_VAR=custom-value, got %q", envMap["CUSTOM_VAR"])
 	}
 }

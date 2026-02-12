@@ -57,6 +57,11 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				}
 			}
 
+			// Custom agent type requires --image.
+			if agentType == "custom" && image == "" {
+				return fmt.Errorf("--image is required when using custom agent type")
+			}
+
 			// Auto-create secret from token if no explicit secret is set.
 			if secret == "" && cfg.Config != nil {
 				if cfg.Config.OAuthToken != "" && cfg.Config.APIKey != "" {
@@ -83,7 +88,8 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				}
 			}
 
-			if secret == "" {
+			// Credentials are required for built-in agent types, optional for custom.
+			if secret == "" && agentType != "custom" {
 				return fmt.Errorf("no credentials configured (set oauthToken/apiKey in config file, or use --secret flag)")
 			}
 
@@ -161,15 +167,18 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 				Spec: axonv1alpha1.TaskSpec{
 					Type:   agentType,
 					Prompt: prompt,
-					Credentials: axonv1alpha1.Credentials{
-						Type: axonv1alpha1.CredentialType(credentialType),
-						SecretRef: axonv1alpha1.SecretReference{
-							Name: secret,
-						},
-					},
-					Model: model,
-					Image: image,
+					Model:  model,
+					Image:  image,
 				},
+			}
+
+			if secret != "" {
+				task.Spec.Credentials = &axonv1alpha1.Credentials{
+					Type: axonv1alpha1.CredentialType(credentialType),
+					SecretRef: axonv1alpha1.SecretReference{
+						Name: secret,
+					},
+				}
 			}
 
 			if workspace != "" {
@@ -233,7 +242,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "task prompt (required)")
-	cmd.Flags().StringVarP(&agentType, "type", "t", "claude-code", "agent type (claude-code, codex, gemini)")
+	cmd.Flags().StringVarP(&agentType, "type", "t", "claude-code", "agent type (claude-code, codex, gemini, custom)")
 	cmd.Flags().StringVar(&secret, "secret", "", "secret name with credentials (overrides oauthToken/apiKey in config)")
 	cmd.Flags().StringVar(&credentialType, "credential-type", "api-key", "credential type (api-key, oauth)")
 	cmd.Flags().StringVar(&model, "model", "", "model override")
@@ -249,7 +258,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.MarkFlagRequired("prompt")
 
 	_ = cmd.RegisterFlagCompletionFunc("credential-type", cobra.FixedCompletions([]string{"api-key", "oauth"}, cobra.ShellCompDirectiveNoFileComp))
-	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex", "gemini"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex", "gemini", "custom"}, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }

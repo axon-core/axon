@@ -58,7 +58,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -191,7 +191,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -257,7 +257,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -327,7 +327,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -420,7 +420,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -477,7 +477,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -570,7 +570,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",
@@ -650,7 +650,7 @@ var _ = Describe("TaskSpawner Controller", func() {
 					},
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeOAuth,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "claude-credentials",

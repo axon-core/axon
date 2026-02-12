@@ -196,7 +196,7 @@ var _ = Describe("CLI Delete All Commands", func() {
 					Spec: axonv1alpha1.TaskSpec{
 						Type:   "claude-code",
 						Prompt: "test",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeAPIKey,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "test-secret",
@@ -287,7 +287,7 @@ var _ = Describe("CLI Delete All Commands", func() {
 					Spec: axonv1alpha1.TaskSpawnerSpec{
 						TaskTemplate: axonv1alpha1.TaskTemplate{
 							Type: "claude-code",
-							Credentials: axonv1alpha1.Credentials{
+							Credentials: &axonv1alpha1.Credentials{
 								Type: axonv1alpha1.CredentialTypeAPIKey,
 								SecretRef: axonv1alpha1.SecretReference{
 									Name: "test-secret",
@@ -377,7 +377,7 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeAPIKey,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "test-secret",
@@ -425,7 +425,7 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeAPIKey,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "test-secret",
@@ -473,7 +473,7 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 				Spec: axonv1alpha1.TaskSpawnerSpec{
 					TaskTemplate: axonv1alpha1.TaskTemplate{
 						Type: "claude-code",
-						Credentials: axonv1alpha1.Credentials{
+						Credentials: &axonv1alpha1.Credentials{
 							Type: axonv1alpha1.CredentialTypeAPIKey,
 							SecretRef: axonv1alpha1.SecretReference{
 								Name: "test-secret",

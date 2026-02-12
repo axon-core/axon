@@ -29,6 +29,9 @@ const (
 	// AgentTypeGemini is the agent type for Google Gemini CLI.
 	AgentTypeGemini = "gemini"
 
+	// AgentTypeCustom is the agent type for custom user-provided images.
+	AgentTypeCustom = "custom"
+
 	// GitCloneImage is the image used for cloning git repositories.
 	GitCloneImage = "alpine/git:v2.47.2"
 
@@ -76,6 +79,11 @@ func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.Work
 		return b.buildAgentJob(task, workspace, b.CodexImage, b.CodexImagePullPolicy)
 	case AgentTypeGemini:
 		return b.buildAgentJob(task, workspace, b.GeminiImage, b.GeminiImagePullPolicy)
+	case AgentTypeCustom:
+		if task.Spec.Image == "" {
+			return nil, fmt.Errorf("image is required for custom agent type")
+		}
+		return b.buildAgentJob(task, workspace, task.Spec.Image, corev1.PullIfNotPresent)
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", task.Spec.Type)
 	}
@@ -128,33 +136,35 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 		})
 	}
 
-	switch task.Spec.Credentials.Type {
-	case axonv1alpha1.CredentialTypeAPIKey:
-		keyName := apiKeyEnvVar(task.Spec.Type)
-		envVars = append(envVars, corev1.EnvVar{
-			Name: keyName,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: task.Spec.Credentials.SecretRef.Name,
+	if task.Spec.Credentials != nil {
+		switch task.Spec.Credentials.Type {
+		case axonv1alpha1.CredentialTypeAPIKey:
+			keyName := apiKeyEnvVar(task.Spec.Type)
+			envVars = append(envVars, corev1.EnvVar{
+				Name: keyName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: task.Spec.Credentials.SecretRef.Name,
+						},
+						Key: keyName,
 					},
-					Key: keyName,
 				},
-			},
-		})
-	case axonv1alpha1.CredentialTypeOAuth:
-		tokenName := oauthEnvVar(task.Spec.Type)
-		envVars = append(envVars, corev1.EnvVar{
-			Name: tokenName,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: task.Spec.Credentials.SecretRef.Name,
+			})
+		case axonv1alpha1.CredentialTypeOAuth:
+			tokenName := oauthEnvVar(task.Spec.Type)
+			envVars = append(envVars, corev1.EnvVar{
+				Name: tokenName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: task.Spec.Credentials.SecretRef.Name,
+						},
+						Key: tokenName,
 					},
-					Key: tokenName,
 				},
-			},
-		})
+			})
+		}
 	}
 
 	var workspaceEnvVars []corev1.EnvVar

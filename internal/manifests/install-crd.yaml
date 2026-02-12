@@ -50,7 +50,9 @@ spec:
             description: TaskSpec defines the desired state of Task.
             properties:
               credentials:
-                description: Credentials specifies how to authenticate with the agent.
+                description: |-
+                  Credentials specifies how to authenticate with the agent.
+                  Required for built-in agent types; optional for custom agents.
                 properties:
                   secretRef:
                     description: SecretRef references the Secret containing credentials.
@@ -335,11 +337,14 @@ spec:
                 minimum: 0
                 type: integer
               type:
-                description: Type specifies the agent type (e.g., claude-code).
+                description: |-
+                  Type specifies the agent type (e.g., claude-code).
+                  When set to "custom", the image field is required and credentials are optional.
                 enum:
                 - claude-code
                 - codex
                 - gemini
+                - custom
                 type: string
               workspaceRef:
                 description: WorkspaceRef optionally references a Workspace resource
@@ -352,10 +357,14 @@ spec:
                 - name
                 type: object
             required:
-            - credentials
             - prompt
             - type
             type: object
+            x-kubernetes-validations:
+            - message: image is required when type is custom
+              rule: self.type != 'custom' || has(self.image)
+            - message: credentials is required for built-in agent types
+              rule: self.type == 'custom' || has(self.credentials)
           status:
             description: TaskStatus defines the observed state of Task.
             properties:
@@ -470,8 +479,9 @@ spec:
                 description: TaskTemplate defines the template for spawned Tasks.
                 properties:
                   credentials:
-                    description: Credentials specifies how to authenticate with the
-                      agent.
+                    description: |-
+                      Credentials specifies how to authenticate with the agent.
+                      Required for built-in agent types; optional for custom agents.
                     properties:
                       secretRef:
                         description: SecretRef references the Secret containing credentials.
@@ -760,11 +770,14 @@ spec:
                     minimum: 0
                     type: integer
                   type:
-                    description: Type specifies the agent type (e.g., claude-code).
+                    description: |-
+                      Type specifies the agent type (e.g., claude-code).
+                      When set to "custom", the image field is required and credentials are optional.
                     enum:
                     - claude-code
                     - codex
                     - gemini
+                    - custom
                     type: string
                   workspaceRef:
                     description: |-
@@ -779,9 +792,13 @@ spec:
                     - name
                     type: object
                 required:
-                - credentials
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: image is required when type is custom
+                  rule: self.type != 'custom' || has(self.image)
+                - message: credentials is required for built-in agent types
+                  rule: self.type == 'custom' || has(self.credentials)
               when:
                 description: When defines the conditions that trigger task spawning.
                 properties:

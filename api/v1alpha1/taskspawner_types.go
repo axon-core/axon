@@ -62,15 +62,19 @@ type GitHubIssues struct {
 }
 
 // TaskTemplate defines the template for spawned Tasks.
+// +kubebuilder:validation:XValidation:rule="self.type != 'custom' || has(self.image)",message="image is required when type is custom"
+// +kubebuilder:validation:XValidation:rule="self.type == 'custom' || has(self.credentials)",message="credentials is required for built-in agent types"
 type TaskTemplate struct {
 	// Type specifies the agent type (e.g., claude-code).
+	// When set to "custom", the image field is required and credentials are optional.
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=claude-code;codex;gemini
+	// +kubebuilder:validation:Enum=claude-code;codex;gemini;custom
 	Type string `json:"type"`
 
 	// Credentials specifies how to authenticate with the agent.
-	// +kubebuilder:validation:Required
-	Credentials Credentials `json:"credentials"`
+	// Required for built-in agent types; optional for custom agents.
+	// +optional
+	Credentials *Credentials `json:"credentials,omitempty"`
 
 	// Model optionally overrides the default model.
 	// +optional

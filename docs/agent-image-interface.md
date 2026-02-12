@@ -9,6 +9,10 @@ Axon orchestrates agent tasks as Kubernetes Jobs. By providing a standardized
 execution interface, Axon allows any compatible image to be used as a drop-in
 replacement for the default agents.
 
+To use a custom image, set `type: custom` and `image: <your-image>` in the
+Task spec. Credentials are optional for the `custom` type; pass any
+environment variables your agent needs via `podOverrides.env`.
+
 ## Requirements
 
 ### 1. Entrypoint

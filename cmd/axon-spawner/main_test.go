@@ -68,7 +68,7 @@ func newTaskSpawner(name, namespace string, maxConcurrency *int32) *axonv1alpha1
 			},
 			TaskTemplate: axonv1alpha1.TaskTemplate{
 				Type: "claude-code",
-				Credentials: axonv1alpha1.Credentials{
+				Credentials: &axonv1alpha1.Credentials{
 					Type:      axonv1alpha1.CredentialTypeOAuth,
 					SecretRef: axonv1alpha1.SecretReference{Name: "creds"},
 				},
@@ -91,7 +91,7 @@ func newTask(name, namespace, spawnerName string, phase axonv1alpha1.TaskPhase) 
 		Spec: axonv1alpha1.TaskSpec{
 			Type:   "claude-code",
 			Prompt: "test",
-			Credentials: axonv1alpha1.Credentials{
+			Credentials: &axonv1alpha1.Credentials{
 				Type:      axonv1alpha1.CredentialTypeOAuth,
 				SecretRef: axonv1alpha1.SecretReference{Name: "creds"},
 			},
