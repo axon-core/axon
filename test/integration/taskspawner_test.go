@@ -813,15 +813,20 @@ var _ = Describe("TaskSpawner Controller", func() {
 				return err == nil
 			}, timeout, interval).Should(BeTrue())
 
-			By("Verifying the Deployment has 2 containers (spawner + token-refresher)")
-			Expect(createdDeploy.Spec.Template.Spec.Containers).To(HaveLen(2))
+			By("Verifying the Deployment has 1 container (spawner) and 1 native sidecar init container (token-refresher)")
+			Expect(createdDeploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(createdDeploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 
 			spawner := createdDeploy.Spec.Template.Spec.Containers[0]
 			Expect(spawner.Name).To(Equal("spawner"))
 
-			refresher := createdDeploy.Spec.Template.Spec.Containers[1]
+			refresher := createdDeploy.Spec.Template.Spec.InitContainers[0]
 			Expect(refresher.Name).To(Equal("token-refresher"))
 			Expect(refresher.Image).To(Equal(controller.DefaultTokenRefresherImage))
+
+			By("Verifying the token-refresher uses native sidecar (restartPolicy: Always)")
+			Expect(refresher.RestartPolicy).NotTo(BeNil())
+			Expect(*refresher.RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
 
 			By("Verifying the spawner has --github-token-file flag")
 			Expect(spawner.Args).To(ContainElement("--github-token-file=/shared/token/GITHUB_TOKEN"))

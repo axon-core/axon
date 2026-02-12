@@ -59,7 +59,7 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 	var envVars []corev1.EnvVar
 	var volumes []corev1.Volume
 	var volumeMounts []corev1.VolumeMount
-	var sidecars []corev1.Container
+	var initContainers []corev1.Container
 
 	if workspace != nil {
 		host, owner, repo := parseGitHubRepo(workspace.Repo)
@@ -73,7 +73,7 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 
 		if workspace.SecretRef != nil {
 			if isGitHubApp {
-				// GitHub App: add token refresher sidecar
+				// GitHub App: add token refresher as a native sidecar
 				args = append(args, "--github-token-file=/shared/token/GITHUB_TOKEN")
 
 				volumes = append(volumes,
@@ -99,10 +99,12 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 					ReadOnly:  true,
 				})
 
-				sidecars = append(sidecars, corev1.Container{
+				restartPolicyAlways := corev1.ContainerRestartPolicyAlways
+				initContainers = append(initContainers, corev1.Container{
 					Name:            "token-refresher",
 					Image:           b.TokenRefresherImage,
 					ImagePullPolicy: b.TokenRefresherImagePullPolicy,
+					RestartPolicy:   &restartPolicyAlways,
 					Env: []corev1.EnvVar{
 						{
 							Name: "APP_ID",
@@ -172,9 +174,6 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 		VolumeMounts:    volumeMounts,
 	}
 
-	containers := []corev1.Container{spawnerContainer}
-	containers = append(containers, sidecars...)
-
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ts.Name,
@@ -194,7 +193,8 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 					ServiceAccountName: SpawnerServiceAccount,
 					RestartPolicy:      corev1.RestartPolicyAlways,
 					Volumes:            volumes,
-					Containers:         containers,
+					InitContainers:     initContainers,
+					Containers:         []corev1.Container{spawnerContainer},
 				},
 			},
 		},

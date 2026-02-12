@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -269,18 +270,26 @@ func TestDeploymentBuilder_GitHubApp(t *testing.T) {
 
 	deploy := builder.Build(ts, workspace, true)
 
-	if len(deploy.Spec.Template.Spec.Containers) != 2 {
-		t.Fatalf("expected 2 containers, got %d", len(deploy.Spec.Template.Spec.Containers))
+	if len(deploy.Spec.Template.Spec.Containers) != 1 {
+		t.Fatalf("expected 1 container, got %d", len(deploy.Spec.Template.Spec.Containers))
+	}
+
+	if len(deploy.Spec.Template.Spec.InitContainers) != 1 {
+		t.Fatalf("expected 1 init container, got %d", len(deploy.Spec.Template.Spec.InitContainers))
 	}
 
 	spawner := deploy.Spec.Template.Spec.Containers[0]
-	refresher := deploy.Spec.Template.Spec.Containers[1]
+	refresher := deploy.Spec.Template.Spec.InitContainers[0]
 
 	if spawner.Name != "spawner" {
-		t.Errorf("first container name = %q, want %q", spawner.Name, "spawner")
+		t.Errorf("container name = %q, want %q", spawner.Name, "spawner")
 	}
 	if refresher.Name != "token-refresher" {
-		t.Errorf("second container name = %q, want %q", refresher.Name, "token-refresher")
+		t.Errorf("init container name = %q, want %q", refresher.Name, "token-refresher")
+	}
+
+	if refresher.RestartPolicy == nil || *refresher.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+		t.Errorf("token-refresher RestartPolicy = %v, want %q", refresher.RestartPolicy, corev1.ContainerRestartPolicyAlways)
 	}
 
 	found := false
@@ -343,6 +352,10 @@ func TestDeploymentBuilder_PAT(t *testing.T) {
 
 	if len(deploy.Spec.Template.Spec.Containers) != 1 {
 		t.Fatalf("expected 1 container, got %d", len(deploy.Spec.Template.Spec.Containers))
+	}
+
+	if len(deploy.Spec.Template.Spec.InitContainers) != 0 {
+		t.Errorf("expected 0 init containers, got %d", len(deploy.Spec.Template.Spec.InitContainers))
 	}
 
 	spawner := deploy.Spec.Template.Spec.Containers[0]
