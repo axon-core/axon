@@ -4,6 +4,12 @@ on:
   issue_comment:
     types:
       - created
+  pull_request_review_comment:
+    types:
+      - created
+  pull_request_review:
+    types:
+      - submitted
 
 permissions:
   contents: read
@@ -12,12 +18,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: reset-axon-worker-${{ github.event.issue.number }}
+  group: reset-axon-worker-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   reset-axon-worker:
-    if: contains(github.event.comment.body, '/reset-worker')
+    if: contains(github.event.comment.body || github.event.review.body || '', '/reset-worker')
     runs-on: ubuntu-latest
     env:
       AXON_NAMESPACE: ${{ vars.AXON_NAMESPACE || 'default' }}
@@ -50,7 +56,9 @@ jobs:
               return [...new Set(numbers)].filter((n) => Number.isInteger(n) && n > 0)
             }
 
-            const commenter = context.payload.comment?.user?.login || ""
+            // For pull_request_review events, the commenter is in review.user
+            // For issue_comment and pull_request_review_comment events, it is in comment.user
+            const commenter = context.payload.comment?.user?.login || context.payload.review?.user?.login || ""
             if (!commenter) {
               core.info("Ignoring /reset-worker with unknown commenter")
               core.setOutput("should_reset", "false")
@@ -77,8 +85,13 @@ jobs:
               return
             }
 
+            // For issue_comment events, context.payload.issue is available.
+            // For pull_request_review_comment and pull_request_review events,
+            // only context.payload.pull_request is available.
             const issue = context.payload.issue
-            if (!issue?.pull_request) {
+            const pullRequest = context.payload.pull_request
+
+            if (issue && !issue.pull_request) {
               core.info(`Reset requested on issue #${issue.number}`)
               core.setOutput("should_reset", "true")
               core.setOutput("target_issue_number", String(issue.number))
@@ -86,7 +99,12 @@ jobs:
               return
             }
 
-            const prNumber = issue.number
+            const prNumber = pullRequest?.number || issue?.number
+            if (!prNumber) {
+              core.info("Could not determine PR number from event payload")
+              core.setOutput("should_reset", "false")
+              return
+            }
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
