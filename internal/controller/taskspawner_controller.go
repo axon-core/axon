@@ -102,7 +102,7 @@ func (r *TaskSpawnerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}, &ws); err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.Info("Workspace not found yet, requeuing", "workspace", workspaceRefName)
-				r.recordEvent(&ts, corev1.EventTypeWarning, "WorkspaceNotFound", "Workspace %s not found", workspaceRefName)
+				r.recordEvent(&ts, corev1.EventTypeNormal, "WorkspaceNotFound", "Workspace %s not found, requeuing", workspaceRefName)
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 			}
 			logger.Error(err, "Unable to fetch Workspace for TaskSpawner", "workspace", workspaceRefName)
