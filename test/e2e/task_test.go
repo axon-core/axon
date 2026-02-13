@@ -1,64 +1,27 @@
 package e2e
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/axon-core/axon/test/e2e/framework"
 )
 
-func debugTask(name string) {
-	GinkgoWriter.Println("=== Debug: Task status ===")
-	kubectl("get", "task", name, "-o", "yaml")
-
-	GinkgoWriter.Println("=== Debug: Job status ===")
-	kubectl("get", "job", name, "-o", "yaml")
-
-	GinkgoWriter.Println("=== Debug: Pod status ===")
-	kubectl("get", "pods", "-l", "axon.io/task="+name, "-o", "wide")
-	kubectl("describe", "pods", "-l", "axon.io/task="+name)
-
-	GinkgoWriter.Println("=== Debug: Pod logs ===")
-	kubectl("logs", "job/"+name, "--tail=100")
-
-	GinkgoWriter.Println("=== Debug: Controller logs ===")
-	kubectl("logs", "-n", "axon-system", "deployment/axon-controller-manager", "--tail=50")
-}
-
-const taskName = "e2e-test-task"
-
 var _ = Describe("Task", func() {
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "task", taskName, "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(taskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", taskName, "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-	})
+	f := framework.NewFramework("task")
 
 	It("should run a Task to completion", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Task")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
-  name: ` + taskName + `
+  name: basic-task
 spec:
   type: claude-code
   model: ` + testModel + `
@@ -68,58 +31,36 @@ spec:
     secretRef:
       name: claude-credentials
 `
-		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(taskYAML)
 
 		By("waiting for Job to be created")
-		Eventually(func() error {
-			return kubectlWithInput("", "get", "job", taskName)
-		}, 30*time.Second, time.Second).Should(Succeed())
+		f.WaitForJobCreation("basic-task")
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+taskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("basic-task")
 
 		By("verifying Task status is Succeeded")
-		output := kubectlOutput("get", "task", taskName, "-o", "jsonpath={.status.phase}")
-		Expect(output).To(Equal("Succeeded"))
+		Expect(f.GetTaskPhase("basic-task")).To(Equal("Succeeded"))
 
 		By("getting Job logs")
-		logs := kubectlOutput("logs", "job/"+taskName)
+		logs := f.GetJobLogs("basic-task")
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
 	})
 })
 
-const makeTaskName = "e2e-test-make-task"
-
 var _ = Describe("Task with make available", func() {
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "task", makeTaskName, "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(makeTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", makeTaskName, "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-	})
+	f := framework.NewFramework("make")
 
 	It("should have make command available in claude-code container", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Task that uses make")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
-  name: ` + makeTaskName + `
+  name: make-task
 spec:
   type: claude-code
   model: ` + testModel + `
@@ -129,54 +70,30 @@ spec:
     secretRef:
       name: claude-credentials
 `
-		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(taskYAML)
 
 		By("waiting for Job to be created")
-		Eventually(func() error {
-			return kubectlWithInput("", "get", "job", makeTaskName)
-		}, 30*time.Second, time.Second).Should(Succeed())
+		f.WaitForJobCreation("make-task")
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+makeTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("make-task")
 
 		By("verifying Task status is Succeeded")
-		output := kubectlOutput("get", "task", makeTaskName, "-o", "jsonpath={.status.phase}")
-		Expect(output).To(Equal("Succeeded"))
+		Expect(f.GetTaskPhase("make-task")).To(Equal("Succeeded"))
 
 		By("getting Job logs")
-		logs := kubectlOutput("logs", "job/"+makeTaskName)
+		logs := f.GetJobLogs("make-task")
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
 	})
 })
 
-const workspaceTaskName = "e2e-test-workspace-task"
-
 var _ = Describe("Task with workspace", func() {
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "task", workspaceTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-workspace", "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(workspaceTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", workspaceTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-workspace", "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-	})
+	f := framework.NewFramework("ws")
 
 	It("should run a Task with workspace to completion", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Workspace resource")
 		wsYAML := `apiVersion: axon.io/v1alpha1
@@ -187,13 +104,13 @@ spec:
   repo: https://github.com/axon-core/axon.git
   ref: main
 `
-		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(wsYAML)
 
 		By("creating a Task with workspace ref")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
-  name: ` + workspaceTaskName + `
+  name: ws-task
 spec:
   type: claude-code
   model: ` + testModel + `
@@ -205,24 +122,19 @@ spec:
   workspaceRef:
     name: e2e-workspace
 `
-		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(taskYAML)
 
 		By("waiting for Job to be created")
-		Eventually(func() error {
-			return kubectlWithInput("", "get", "job", workspaceTaskName)
-		}, 30*time.Second, time.Second).Should(Succeed())
+		f.WaitForJobCreation("ws-task")
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+workspaceTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("ws-task")
 
 		By("verifying Task status is Succeeded")
-		output := kubectlOutput("get", "task", workspaceTaskName, "-o", "jsonpath={.status.phase}")
-		Expect(output).To(Equal("Succeeded"))
+		Expect(f.GetTaskPhase("ws-task")).To(Equal("Succeeded"))
 
 		By("getting Job logs")
-		logs := kubectlOutput("logs", "job/"+workspaceTaskName)
+		logs := f.GetJobLogs("ws-task")
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
 
 		By("verifying no permission errors in logs")
@@ -232,32 +144,13 @@ spec:
 	})
 })
 
-const outputsTaskName = "e2e-test-outputs-task"
-
 var _ = Describe("Task output capture", func() {
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "task", outputsTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-outputs-workspace", "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(outputsTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", outputsTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-outputs-workspace", "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-	})
+	f := framework.NewFramework("output")
 
 	It("should populate Outputs with branch name after task completes", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Workspace resource")
 		wsYAML := `apiVersion: axon.io/v1alpha1
@@ -268,13 +161,13 @@ spec:
   repo: https://github.com/axon-core/axon.git
   ref: main
 `
-		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(wsYAML)
 
 		By("creating a Task with workspace ref")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
-  name: ` + outputsTaskName + `
+  name: outputs-task
 spec:
   type: claude-code
   model: ` + testModel + `
@@ -286,70 +179,46 @@ spec:
   workspaceRef:
     name: e2e-outputs-workspace
 `
-		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(taskYAML)
 
 		By("waiting for Job to be created")
-		Eventually(func() error {
-			return kubectlWithInput("", "get", "job", outputsTaskName)
-		}, 30*time.Second, time.Second).Should(Succeed())
+		f.WaitForJobCreation("outputs-task")
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+outputsTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("outputs-task")
 
 		By("verifying Task status is Succeeded")
-		output := kubectlOutput("get", "task", outputsTaskName, "-o", "jsonpath={.status.phase}")
-		Expect(output).To(Equal("Succeeded"))
+		Expect(f.GetTaskPhase("outputs-task")).To(Equal("Succeeded"))
 
 		By("verifying output markers appear in Pod logs")
-		logs := kubectlOutput("logs", "job/"+outputsTaskName)
+		logs := f.GetJobLogs("outputs-task")
 		Expect(logs).To(ContainSubstring("---AXON_OUTPUTS_START---"))
 		Expect(logs).To(ContainSubstring("---AXON_OUTPUTS_END---"))
 		Expect(logs).To(ContainSubstring("branch: main"))
 
 		By("verifying Outputs field is populated in Task status")
-		outputsJSON := kubectlOutput("get", "task", outputsTaskName, "-o", "jsonpath={.status.outputs}")
+		outputsJSON := f.KubectlOutput("get", "task", "outputs-task", "-o", "jsonpath={.status.outputs}")
 		Expect(outputsJSON).To(ContainSubstring("branch: main"))
 	})
 })
 
-const githubTaskName = "e2e-test-github-task"
-
 var _ = Describe("Task with workspace and secretRef", func() {
+	f := framework.NewFramework("github")
+
 	BeforeEach(func() {
 		if githubToken == "" {
 			Skip("GITHUB_TOKEN not set, skipping GitHub e2e tests")
 		}
-
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "secret", "workspace-credentials", "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-github-workspace", "--ignore-not-found")
-		kubectl("delete", "task", githubTaskName, "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(githubTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", githubTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-github-workspace", "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "secret", "workspace-credentials", "--ignore-not-found")
 	})
 
 	It("should run a Task with gh CLI available and GITHUB_TOKEN injected", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating workspace credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "workspace-credentials",
-			"--from-literal=GITHUB_TOKEN="+githubToken)).To(Succeed())
+		f.CreateSecret("workspace-credentials",
+			"GITHUB_TOKEN="+githubToken)
 
 		By("creating a Workspace resource with secretRef")
 		wsYAML := `apiVersion: axon.io/v1alpha1
@@ -362,13 +231,13 @@ spec:
   secretRef:
     name: workspace-credentials
 `
-		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(wsYAML)
 
 		By("creating a Task with workspace ref")
 		taskYAML := `apiVersion: axon.io/v1alpha1
 kind: Task
 metadata:
-  name: ` + githubTaskName + `
+  name: github-task
 spec:
   type: claude-code
   model: ` + testModel + `
@@ -380,51 +249,50 @@ spec:
   workspaceRef:
     name: e2e-github-workspace
 `
-		Expect(kubectlWithInput(taskYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(taskYAML)
 
 		By("waiting for Job to be created")
-		Eventually(func() error {
-			return kubectlWithInput("", "get", "job", githubTaskName)
-		}, 30*time.Second, time.Second).Should(Succeed())
+		f.WaitForJobCreation("github-task")
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+githubTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("github-task")
 
 		By("verifying Task status is Succeeded")
-		output := kubectlOutput("get", "task", githubTaskName, "-o", "jsonpath={.status.phase}")
-		Expect(output).To(Equal("Succeeded"))
+		Expect(f.GetTaskPhase("github-task")).To(Equal("Succeeded"))
 
 		By("getting Job logs")
-		logs := kubectlOutput("logs", "job/"+githubTaskName)
+		logs := f.GetJobLogs("github-task")
 		GinkgoWriter.Printf("Job logs:\n%s\n", logs)
 	})
 })
 
-func kubectl(args ...string) {
-	cmd := exec.Command("kubectl", args...)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	_ = cmd.Run()
-}
+var _ = Describe("Task cleanup on failure", func() {
+	f := framework.NewFramework("cleanup")
 
-func kubectlWithInput(input string, args ...string) error {
-	cmd := exec.Command("kubectl", args...)
-	if input != "" {
-		cmd.Stdin = strings.NewReader(input)
-	}
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	return cmd.Run()
-}
+	It("should clean up namespace resources automatically", func() {
+		By("creating OAuth credentials secret")
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
-func kubectlOutput(args ...string) string {
-	cmd := exec.Command("kubectl", args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	Expect(err).NotTo(HaveOccurred())
-	return strings.TrimSpace(out.String())
-}
+		By("creating a Task")
+		taskYAML := `apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: cleanup-task
+spec:
+  type: claude-code
+  model: ` + testModel + `
+  prompt: "Print 'Hello' to stdout"
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-credentials
+`
+		f.ApplyYAML(taskYAML)
+
+		By("verifying resources exist in the namespace")
+		Eventually(func() string {
+			return f.KubectlOutput("get", "tasks", "-o", "name")
+		}, 30*time.Second, time.Second).Should(ContainSubstring("cleanup-task"))
+	})
+})

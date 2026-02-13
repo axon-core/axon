@@ -1,107 +1,78 @@
 package e2e
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/axon-core/axon/test/e2e/framework"
 )
 
-const cliTaskName = "e2e-cli-test-task"
-const cliWorkspaceTaskName = "e2e-cli-workspace-task"
-const cliFollowTaskName = "e2e-cli-follow-task"
-
 var _ = Describe("CLI", func() {
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-		kubectl("delete", "task", cliTaskName, "--ignore-not-found")
-		kubectl("delete", "task", cliWorkspaceTaskName, "--ignore-not-found")
-		kubectl("delete", "task", cliFollowTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(cliTaskName)
-			debugTask(cliWorkspaceTaskName)
-			debugTask(cliFollowTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", cliTaskName, "--ignore-not-found")
-		kubectl("delete", "task", cliWorkspaceTaskName, "--ignore-not-found")
-		kubectl("delete", "task", cliFollowTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
-		kubectl("delete", "secret", "claude-credentials", "--ignore-not-found")
-	})
+	f := framework.NewFramework("cli")
 
 	It("should run a Task to completion", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Task via CLI")
-		axon("run",
+		framework.Axon("run",
+			"-n", f.Namespace,
 			"-p", "Print 'Hello from Axon CLI e2e test' to stdout",
 			"--secret", "claude-credentials",
 			"--credential-type", "oauth",
 			"--model", testModel,
-			"--name", cliTaskName,
+			"--name", "cli-task",
 		)
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+cliTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("cli-task")
 
 		By("verifying task status via CLI get (detail)")
-		output := axonOutput("get", "task", cliTaskName)
+		output := framework.AxonOutput("get", "task", "cli-task", "-n", f.Namespace)
 		Expect(output).To(ContainSubstring("Succeeded"))
 
 		By("verifying YAML output for a single task")
-		output = axonOutput("get", "task", cliTaskName, "-o", "yaml")
+		output = framework.AxonOutput("get", "task", "cli-task", "-n", f.Namespace, "-o", "yaml")
 		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
 		Expect(output).To(ContainSubstring("kind: Task"))
-		Expect(output).To(ContainSubstring("name: " + cliTaskName))
+		Expect(output).To(ContainSubstring("name: cli-task"))
 
 		By("verifying JSON output for a single task")
-		output = axonOutput("get", "task", cliTaskName, "-o", "json")
+		output = framework.AxonOutput("get", "task", "cli-task", "-n", f.Namespace, "-o", "json")
 		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
 		Expect(output).To(ContainSubstring(`"kind": "Task"`))
-		Expect(output).To(ContainSubstring(`"name": "` + cliTaskName + `"`))
+		Expect(output).To(ContainSubstring(`"name": "cli-task"`))
 
 		By("verifying task logs via CLI")
-		logs := axonOutput("logs", cliTaskName)
+		logs := framework.AxonOutput("logs", "cli-task", "-n", f.Namespace)
 		Expect(logs).NotTo(BeEmpty())
 
 		By("deleting task via CLI")
-		axon("delete", "task", cliTaskName)
+		framework.Axon("delete", "task", "cli-task", "-n", f.Namespace)
 
 		By("verifying task is no longer listed")
-		output = axonOutput("get", "tasks")
-		Expect(output).NotTo(ContainSubstring(cliTaskName))
+		output = framework.AxonOutput("get", "tasks", "-n", f.Namespace)
+		Expect(output).NotTo(ContainSubstring("cli-task"))
 	})
 
 	It("should follow logs from task creation with -f", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Task and immediately following logs")
-		axon("run",
+		framework.Axon("run",
+			"-n", f.Namespace,
 			"-p", "Print 'Hello from follow test' to stdout",
 			"--secret", "claude-credentials",
 			"--credential-type", "oauth",
-			"--name", cliFollowTaskName,
+			"--name", "cli-follow-task",
 		)
 
-		stdout, stderr := axonOutputWithStderr("logs", cliFollowTaskName, "-f")
+		stdout, stderr := framework.AxonOutputWithStderr("logs", "cli-follow-task", "-n", f.Namespace, "-f")
 		By("verifying stderr contains streaming status")
 		Expect(stderr).To(ContainSubstring("Streaming container (claude-code) logs..."))
 		By("verifying stderr contains result summary")
@@ -112,8 +83,8 @@ var _ = Describe("CLI", func() {
 
 	It("should run a Task with workspace to completion", func() {
 		By("creating OAuth credentials secret")
-		Expect(kubectlWithInput("", "create", "secret", "generic", "claude-credentials",
-			"--from-literal=CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)).To(Succeed())
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
 		By("creating a Workspace resource")
 		wsYAML := `apiVersion: axon.io/v1alpha1
@@ -124,216 +95,182 @@ spec:
   repo: https://github.com/axon-core/axon.git
   ref: main
 `
-		Expect(kubectlWithInput(wsYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(wsYAML)
 
 		By("creating a Task with workspace via CLI")
-		axon("run",
+		framework.Axon("run",
+			"-n", f.Namespace,
 			"-p", "Run 'git log --oneline -1' and print the output",
 			"--secret", "claude-credentials",
 			"--credential-type", "oauth",
 			"--model", testModel,
 			"--workspace", "e2e-cli-workspace",
-			"--name", cliWorkspaceTaskName,
+			"--name", "cli-ws-task",
 		)
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+cliWorkspaceTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("cli-ws-task")
 
 		By("verifying task status via CLI get (detail)")
-		output := axonOutput("get", "task", cliWorkspaceTaskName)
+		output := framework.AxonOutput("get", "task", "cli-ws-task", "-n", f.Namespace)
 		Expect(output).To(ContainSubstring("Succeeded"))
 		Expect(output).To(ContainSubstring("Workspace"))
 
 		By("verifying task logs via CLI")
-		logs := axonOutput("logs", cliWorkspaceTaskName)
+		logs := framework.AxonOutput("logs", "cli-ws-task", "-n", f.Namespace)
 		Expect(logs).NotTo(BeEmpty())
 
 		By("deleting task via CLI")
-		axon("delete", "task", cliWorkspaceTaskName)
-		kubectl("delete", "workspace", "e2e-cli-workspace", "--ignore-not-found")
+		framework.Axon("delete", "task", "cli-ws-task", "-n", f.Namespace)
 
 		By("verifying task is no longer listed")
-		output = axonOutput("get", "tasks")
-		Expect(output).NotTo(ContainSubstring(cliWorkspaceTaskName))
+		output = framework.AxonOutput("get", "tasks", "-n", f.Namespace)
+		Expect(output).NotTo(ContainSubstring("cli-ws-task"))
 	})
 })
 
 var _ = Describe("create", func() {
 	It("should fail without a resource type", func() {
-		axonFail("create")
+		framework.AxonFail("create")
 	})
 })
 
 var _ = Describe("delete", func() {
 	It("should fail without a resource type", func() {
-		axonFail("delete")
+		framework.AxonFail("delete")
 	})
 
 	It("should fail for a nonexistent task", func() {
-		axonFail("delete", "task", "nonexistent-task-name")
+		framework.AxonFail("delete", "task", "nonexistent-task-name")
 	})
 
 	It("should fail for a nonexistent workspace", func() {
-		axonFail("delete", "workspace", "nonexistent-workspace-name")
+		framework.AxonFail("delete", "workspace", "nonexistent-workspace-name")
 	})
 
 	It("should fail for a nonexistent taskspawner", func() {
-		axonFail("delete", "taskspawner", "nonexistent-spawner-name")
+		framework.AxonFail("delete", "taskspawner", "nonexistent-spawner-name")
 	})
 })
 
 var _ = Describe("get", func() {
 	It("should fail without a resource type", func() {
-		axonFail("get")
+		framework.AxonFail("get")
 	})
 
 	It("should succeed with 'tasks' alias", func() {
-		axonOutput("get", "tasks")
+		framework.AxonOutput("get", "tasks")
 	})
 
 	It("should succeed with 'task' subcommand", func() {
-		axonOutput("get", "task")
+		framework.AxonOutput("get", "task")
 	})
 
 	It("should succeed with 'workspaces' alias", func() {
-		axonOutput("get", "workspaces")
+		framework.AxonOutput("get", "workspaces")
 	})
 
 	It("should succeed with 'workspace' subcommand", func() {
-		axonOutput("get", "workspace")
+		framework.AxonOutput("get", "workspace")
 	})
 
 	It("should fail for a nonexistent task", func() {
-		axonFail("get", "task", "nonexistent-task-name")
+		framework.AxonFail("get", "task", "nonexistent-task-name")
 	})
 
 	It("should fail for a nonexistent workspace", func() {
-		axonFail("get", "workspace", "nonexistent-workspace-name")
+		framework.AxonFail("get", "workspace", "nonexistent-workspace-name")
 	})
 
 	It("should output task list in YAML format", func() {
-		output := axonOutput("get", "tasks", "-o", "yaml")
+		output := framework.AxonOutput("get", "tasks", "-o", "yaml")
 		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
 		Expect(output).To(ContainSubstring("kind: TaskList"))
 	})
 
 	It("should output task list in JSON format", func() {
-		output := axonOutput("get", "tasks", "-o", "json")
+		output := framework.AxonOutput("get", "tasks", "-o", "json")
 		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
 		Expect(output).To(ContainSubstring(`"kind": "TaskList"`))
 	})
 
 	It("should output workspace list in YAML format", func() {
-		output := axonOutput("get", "workspaces", "-o", "yaml")
+		output := framework.AxonOutput("get", "workspaces", "-o", "yaml")
 		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
 		Expect(output).To(ContainSubstring("kind: WorkspaceList"))
 	})
 
 	It("should output workspace list in JSON format", func() {
-		output := axonOutput("get", "workspaces", "-o", "json")
+		output := framework.AxonOutput("get", "workspaces", "-o", "json")
 		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
 		Expect(output).To(ContainSubstring(`"kind": "WorkspaceList"`))
 	})
 
 	It("should fail with unknown output format", func() {
-		axonFail("get", "tasks", "-o", "invalid")
+		framework.AxonFail("get", "tasks", "-o", "invalid")
 	})
 })
 
 var _ = Describe("workspace CRUD", func() {
-	const wsName = "e2e-test-workspace"
-
-	BeforeEach(func() {
-		kubectl("delete", "workspace", wsName, "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		kubectl("delete", "workspace", wsName, "--ignore-not-found")
-	})
+	f := framework.NewFramework("ws-crud")
 
 	It("should create, get, and delete a workspace", func() {
 		By("creating a workspace via CLI")
-		axon("create", "workspace", wsName,
+		framework.Axon("create", "workspace", "test-ws",
+			"-n", f.Namespace,
 			"--repo", "https://github.com/axon-core/axon.git",
 			"--ref", "main",
 		)
 
 		By("verifying workspace exists via get")
-		output := axonOutput("get", "workspace", wsName)
-		Expect(output).To(ContainSubstring(wsName))
+		output := framework.AxonOutput("get", "workspace", "test-ws", "-n", f.Namespace)
+		Expect(output).To(ContainSubstring("test-ws"))
 		Expect(output).To(ContainSubstring("https://github.com/axon-core/axon.git"))
 
 		By("verifying workspace in list")
-		output = axonOutput("get", "workspaces")
-		Expect(output).To(ContainSubstring(wsName))
+		output = framework.AxonOutput("get", "workspaces", "-n", f.Namespace)
+		Expect(output).To(ContainSubstring("test-ws"))
 
 		By("verifying YAML output")
-		output = axonOutput("get", "workspace", wsName, "-o", "yaml")
+		output = framework.AxonOutput("get", "workspace", "test-ws", "-n", f.Namespace, "-o", "yaml")
 		Expect(output).To(ContainSubstring("apiVersion: axon.io/v1alpha1"))
 		Expect(output).To(ContainSubstring("kind: Workspace"))
-		Expect(output).To(ContainSubstring("name: " + wsName))
+		Expect(output).To(ContainSubstring("name: test-ws"))
 
 		By("verifying JSON output")
-		output = axonOutput("get", "workspace", wsName, "-o", "json")
+		output = framework.AxonOutput("get", "workspace", "test-ws", "-n", f.Namespace, "-o", "json")
 		Expect(output).To(ContainSubstring(`"apiVersion": "axon.io/v1alpha1"`))
 		Expect(output).To(ContainSubstring(`"kind": "Workspace"`))
 
 		By("deleting workspace via CLI")
-		axon("delete", "workspace", wsName)
+		framework.Axon("delete", "workspace", "test-ws", "-n", f.Namespace)
 
 		By("verifying workspace is deleted")
-		axonFail("get", "workspace", wsName)
+		framework.AxonFail("get", "workspace", "test-ws", "-n", f.Namespace)
 	})
 })
 
-func axonBin() string {
-	if bin := os.Getenv("AXON_BIN"); bin != "" {
-		return bin
-	}
-	return "axon"
-}
+var _ = Describe("CLI with namespace flag", func() {
+	f := framework.NewFramework("cli-ns")
 
-func axon(args ...string) {
-	cmd := exec.Command(axonBin(), args...)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	err := cmd.Run()
-	Expect(err).NotTo(HaveOccurred())
-}
+	It("should scope operations to the specified namespace", func() {
+		By("creating OAuth credentials secret in the test namespace")
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
 
-func axonOutput(args ...string) string {
-	cmd := exec.Command(axonBin(), args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	Expect(err).NotTo(HaveOccurred())
-	return strings.TrimSpace(out.String())
-}
+		By("creating a Task via CLI with namespace flag")
+		framework.Axon("run",
+			"-n", f.Namespace,
+			"-p", "Print 'hello' to stdout",
+			"--secret", "claude-credentials",
+			"--credential-type", "oauth",
+			"--model", testModel,
+			"--name", "ns-task",
+		)
 
-func axonOutputWithStderr(args ...string) (string, string) {
-	cmd := exec.Command(axonBin(), args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	Expect(err).NotTo(HaveOccurred())
-	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
-}
-
-func axonFail(args ...string) {
-	cmd := exec.Command(axonBin(), args...)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	err := cmd.Run()
-	Expect(err).To(HaveOccurred())
-}
-
-func axonCommand(args ...string) *exec.Cmd {
-	cmd := exec.Command(axonBin(), args...)
-	cmd.Stdout = GinkgoWriter
-	cmd.Stderr = GinkgoWriter
-	return cmd
-}
+		By("verifying task exists only in the test namespace")
+		Eventually(func() string {
+			return framework.AxonOutput("get", "tasks", "-n", f.Namespace)
+		}, 30*time.Second, time.Second).Should(ContainSubstring("ns-task"))
+	})
+})

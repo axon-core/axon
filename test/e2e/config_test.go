@@ -7,68 +7,37 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/axon-core/axon/test/e2e/framework"
 )
 
-const configTaskName = "e2e-config-test-task"
-const configOverrideTaskName = "e2e-config-override-task"
-
 var _ = Describe("Config", func() {
-	var configPath string
-
-	BeforeEach(func() {
-		By("cleaning up existing resources")
-		kubectl("delete", "secret", "axon-credentials", "--ignore-not-found")
-		kubectl("delete", "task", configTaskName, "--ignore-not-found")
-		kubectl("delete", "task", configOverrideTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "axon-workspace", "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-config-ws-override", "--ignore-not-found")
-	})
-
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			By("collecting debug info on failure")
-			debugTask(configTaskName)
-			debugTask(configOverrideTaskName)
-		}
-
-		By("cleaning up test resources")
-		kubectl("delete", "task", configTaskName, "--ignore-not-found")
-		kubectl("delete", "task", configOverrideTaskName, "--ignore-not-found")
-		kubectl("delete", "workspace", "axon-workspace", "--ignore-not-found")
-		kubectl("delete", "workspace", "e2e-config-ws-override", "--ignore-not-found")
-		kubectl("delete", "secret", "axon-credentials", "--ignore-not-found")
-		if configPath != "" {
-			os.Remove(configPath)
-		}
-	})
+	f := framework.NewFramework("config")
 
 	It("should run a Task using config file defaults", func() {
 		By("writing a temp config file with oauthToken and inline workspace")
 		dir := GinkgoT().TempDir()
-		configPath = filepath.Join(dir, "config.yaml")
-		configContent := "oauthToken: " + oauthToken + "\nworkspace:\n  repo: https://github.com/axon-core/axon.git\n  ref: main\n"
+		configPath := filepath.Join(dir, "config.yaml")
+		configContent := "oauthToken: " + oauthToken + "\nnamespace: " + f.Namespace + "\nworkspace:\n  repo: https://github.com/axon-core/axon.git\n  ref: main\n"
 		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
 
 		By("creating a Task via CLI using config defaults (no --secret or --credential-type)")
-		axon("run",
+		framework.Axon("run",
 			"-p", "Run 'git log --oneline -1' and print the output",
 			"--config", configPath,
-			"--name", configTaskName,
+			"--name", "config-task",
 		)
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+configTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("config-task")
 
 		By("verifying task status via CLI get")
-		output := axonOutput("get", "task", configTaskName)
+		output := framework.AxonOutput("get", "task", "config-task", "-n", f.Namespace)
 		Expect(output).To(ContainSubstring("Succeeded"))
 		Expect(output).To(ContainSubstring("Workspace"))
 
 		By("deleting task via CLI")
-		axon("delete", "task", configTaskName)
-		kubectl("delete", "workspace", "axon-workspace", "--ignore-not-found")
+		framework.Axon("delete", "task", "config-task", "-n", f.Namespace)
 	})
 
 	It("should allow CLI flags to override config file", func() {
@@ -81,42 +50,39 @@ spec:
   repo: https://github.com/axon-core/axon.git
   ref: main
 `
-		Expect(kubectlWithInput(overrideWsYAML, "apply", "-f", "-")).To(Succeed())
+		f.ApplyYAML(overrideWsYAML)
 
 		By("writing a temp config file with oauthToken and inline workspace (bad ref)")
 		dir := GinkgoT().TempDir()
-		configPath = filepath.Join(dir, "config.yaml")
-		configContent := "oauthToken: " + oauthToken + "\nworkspace:\n  repo: https://github.com/axon-core/axon.git\n  ref: v0.0.0\n"
+		configPath := filepath.Join(dir, "config.yaml")
+		configContent := "oauthToken: " + oauthToken + "\nnamespace: " + f.Namespace + "\nworkspace:\n  repo: https://github.com/axon-core/axon.git\n  ref: v0.0.0\n"
 		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
 
 		By("creating a Task with CLI flag overriding config workspace")
-		axon("run",
+		framework.Axon("run",
 			"-p", "Run 'git log --oneline -1' and print the output",
 			"--config", configPath,
 			"--workspace", "e2e-config-ws-override",
-			"--name", configOverrideTaskName,
+			"--name", "config-override-task",
 		)
 
 		By("waiting for Job to complete")
-		Eventually(func() error {
-			return kubectlWithInput("", "wait", "--for=condition=complete", "job/"+configOverrideTaskName, "--timeout=10s")
-		}, 5*time.Minute, 10*time.Second).Should(Succeed())
+		f.WaitForJobCompletion("config-override-task")
 
 		By("verifying the CLI flag value was used")
-		output := axonOutput("get", "task", configOverrideTaskName)
+		output := framework.AxonOutput("get", "task", "config-override-task", "-n", f.Namespace)
 		Expect(output).To(ContainSubstring("Succeeded"))
 
 		By("deleting task via CLI")
-		axon("delete", "task", configOverrideTaskName)
-		kubectl("delete", "workspace", "e2e-config-ws-override", "--ignore-not-found")
+		framework.Axon("delete", "task", "config-override-task", "-n", f.Namespace)
 	})
 
 	It("should initialize config file via init command", func() {
 		dir := GinkgoT().TempDir()
-		configPath = filepath.Join(dir, "test-config.yaml")
+		configPath := filepath.Join(dir, "test-config.yaml")
 
 		By("running axon init")
-		axon("init", "--config", configPath)
+		framework.Axon("init", "--config", configPath)
 
 		By("verifying file was created with template content")
 		data, err := os.ReadFile(configPath)
@@ -125,10 +91,41 @@ spec:
 		Expect(string(data)).To(ContainSubstring("apiKey:"))
 
 		By("running axon init again without --force (should fail)")
-		cmd := axonCommand("init", "--config", configPath)
+		cmd := framework.AxonCommand("init", "--config", configPath)
 		Expect(cmd.Run()).To(HaveOccurred())
 
 		By("running axon init with --force (should succeed)")
-		axon("init", "--config", configPath, "--force")
+		framework.Axon("init", "--config", configPath, "--force")
+	})
+})
+
+var _ = Describe("Config with namespace", func() {
+	f := framework.NewFramework("config-ns")
+
+	It("should use namespace from config file", func() {
+		By("creating OAuth credentials secret")
+		f.CreateSecret("claude-credentials",
+			"CLAUDE_CODE_OAUTH_TOKEN="+oauthToken)
+
+		By("writing a config with namespace set to test namespace")
+		dir := GinkgoT().TempDir()
+		configPath := filepath.Join(dir, "config.yaml")
+		configContent := "oauthToken: " + oauthToken + "\nnamespace: " + f.Namespace + "\n"
+		Expect(os.WriteFile(configPath, []byte(configContent), 0o644)).To(Succeed())
+
+		By("creating a Task via CLI using config namespace")
+		framework.Axon("run",
+			"--config", configPath,
+			"-p", "Print 'hello' to stdout",
+			"--secret", "claude-credentials",
+			"--credential-type", "oauth",
+			"--model", testModel,
+			"--name", "ns-config-task",
+		)
+
+		By("verifying task exists in the framework namespace")
+		Eventually(func() string {
+			return f.KubectlOutput("get", "tasks", "-o", "name")
+		}, 30*time.Second, time.Second).Should(ContainSubstring("ns-config-task"))
 	})
 })
