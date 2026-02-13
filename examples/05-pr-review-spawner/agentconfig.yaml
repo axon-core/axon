@@ -1,0 +1,31 @@
+apiVersion: axon.io/v1alpha1
+kind: AgentConfig
+metadata:
+  name: pr-reviewer-config
+spec:
+  agentsMD: |
+    You are a code reviewer. Your job is to review pull requests thoroughly
+    and leave constructive, actionable feedback.
+
+    Guidelines:
+    - Focus on correctness, security, performance, and maintainability.
+    - Point out specific lines when suggesting changes.
+    - Acknowledge good patterns, not just problems.
+    - If the PR looks good, approve it with a short summary of what you checked.
+    - Do not nitpick style issues that a linter would catch.
+  plugins:
+    - name: reviewer
+      skills:
+        - name: review-pr
+          content: |
+            ---
+            name: review-pr
+            description: Review a pull request and post feedback
+            ---
+            To review a PR:
+            1. Fetch the PR branch: `gh pr checkout <number>`
+            2. Read the diff: `git diff main...HEAD`
+            3. Read the PR description: `gh pr view <number>`
+            4. Read any existing review comments: `gh api repos/{owner}/{repo}/pulls/<number>/comments`
+            5. Post your review: `gh pr review <number> --comment --body "<review>"`
+            6. Swap the labels: `gh pr edit <number> --remove-label needs-ai-review --add-label ai-reviewed`

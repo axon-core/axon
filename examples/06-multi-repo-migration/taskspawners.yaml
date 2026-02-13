@@ -1,0 +1,106 @@
+# One TaskSpawner per repository, all sharing the same migration prompt
+# and AgentConfig. Add or remove entries to match your repo list.
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: migrate-service-a
+spec:
+  when:
+    cron:
+      schedule: "0 9 12 2 *" # TODO: adjust schedule (this runs Feb 12 at 9 AM UTC)
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: service-a
+    agentConfigRef:
+      name: migration-config
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: |
+      Migrate this repository from the deprecated `log/v1` package to `log/v2`.
+
+      Steps:
+      1. Find all imports of `github.com/your-org/log/v1`. # TODO: replace with actual migration
+      2. Replace them with `github.com/your-org/log/v2`.
+      3. Update any changed API calls (see migration guide below).
+      4. Run tests and fix any compilation errors.
+      5. Open a PR with the changes.
+
+      Migration guide:
+      - `log.Info(msg)` -> `log.Info(msg, nil)` (second arg is now required attrs)
+      - `log.WithField(k, v)` -> `log.With(k, v)`
+      - `log.Fatal(msg)` is removed; use `log.Error(msg, nil); os.Exit(1)`
+    ttlSecondsAfterFinished: 3600
+  maxConcurrency: 1
+---
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: migrate-service-b
+spec:
+  when:
+    cron:
+      schedule: "0 9 12 2 *" # TODO: adjust schedule
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: service-b
+    agentConfigRef:
+      name: migration-config
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: |
+      Migrate this repository from the deprecated `log/v1` package to `log/v2`.
+
+      Steps:
+      1. Find all imports of `github.com/your-org/log/v1`. # TODO: replace with actual migration
+      2. Replace them with `github.com/your-org/log/v2`.
+      3. Update any changed API calls (see migration guide below).
+      4. Run tests and fix any compilation errors.
+      5. Open a PR with the changes.
+
+      Migration guide:
+      - `log.Info(msg)` -> `log.Info(msg, nil)` (second arg is now required attrs)
+      - `log.WithField(k, v)` -> `log.With(k, v)`
+      - `log.Fatal(msg)` is removed; use `log.Error(msg, nil); os.Exit(1)`
+    ttlSecondsAfterFinished: 3600
+  maxConcurrency: 1
+---
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: migrate-service-c
+spec:
+  when:
+    cron:
+      schedule: "0 9 12 2 *" # TODO: adjust schedule
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: service-c
+    agentConfigRef:
+      name: migration-config
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: |
+      Migrate this repository from the deprecated `log/v1` package to `log/v2`.
+
+      Steps:
+      1. Find all imports of `github.com/your-org/log/v1`. # TODO: replace with actual migration
+      2. Replace them with `github.com/your-org/log/v2`.
+      3. Update any changed API calls (see migration guide below).
+      4. Run tests and fix any compilation errors.
+      5. Open a PR with the changes.
+
+      Migration guide:
+      - `log.Info(msg)` -> `log.Info(msg, nil)` (second arg is now required attrs)
+      - `log.WithField(k, v)` -> `log.With(k, v)`
+      - `log.Fatal(msg)` is removed; use `log.Error(msg, nil); os.Exit(1)`
+    ttlSecondsAfterFinished: 3600
+  maxConcurrency: 1

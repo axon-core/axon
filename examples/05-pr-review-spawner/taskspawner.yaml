@@ -1,0 +1,39 @@
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: pr-reviewer
+spec:
+  when:
+    githubIssues:
+      types:
+        - pulls
+      labels:
+        - needs-ai-review
+      excludeLabels:
+        - ai-reviewed
+      state: open
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: review-workspace
+    agentConfigRef:
+      name: pr-reviewer-config
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-credentials
+    promptTemplate: |
+      Review PR #{{.Number}}: {{.Title}}
+
+      Description:
+      {{.Body}}
+
+      Steps:
+      1. Check out the PR branch and read the full diff against main.
+      2. /review-pr {{.Number}}
+
+      After reviewing, remove the "needs-ai-review" label and add "ai-reviewed":
+        gh pr edit {{.Number}} --remove-label needs-ai-review --add-label ai-reviewed
+    ttlSecondsAfterFinished: 3600
+  pollInterval: 5m
+  maxConcurrency: 3
