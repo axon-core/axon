@@ -94,6 +94,9 @@ This TaskSpawner picks up open GitHub issues labeled with `actor/axon` and creat
 - Ensures CI passes before completion
 - Labels issues with `axon/needs-input` when human input is needed
 - Creates a feedback loop: remove the label to re-queue the issue
+- Supports manual reset via `/reset-worker` comment from a repository admin:
+  - Deletes `Task/axon-workers-<ISSUE-NUMBER>` so it can be recreated with the same name
+  - Removes `axon/needs-input` from the relevant issue and PR
 
 **Deploy:**
 ```bash
