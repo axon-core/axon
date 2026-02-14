@@ -57,6 +57,8 @@ type AgentConfigReference struct {
 	Name string `json:"name"`
 }
 
+// +genclient
+// +genclient:noStatus
 // +kubebuilder:object:root=true
 
 // AgentConfig is the Schema for the agentconfigs API.

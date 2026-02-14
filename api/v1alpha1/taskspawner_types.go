@@ -169,6 +169,7 @@ type TaskSpawnerStatus struct {
 	Message string `json:"message,omitempty"`
 }
 
+// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Workspace",type=string,JSONPath=`.spec.taskTemplate.workspaceRef.name`

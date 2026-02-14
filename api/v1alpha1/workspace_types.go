@@ -41,6 +41,8 @@ type WorkspaceSpec struct {
 	Files []WorkspaceFile `json:"files,omitempty"`
 }
 
+// +genclient
+// +genclient:noStatus
 // +kubebuilder:object:root=true
 
 // Workspace is the Schema for the workspaces API.

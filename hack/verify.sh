@@ -36,11 +36,17 @@ for f in "${GENERATED_FILES[@]}"; do
   fi
 done
 
+# Snapshot the generated client directory.
+if [[ -d "pkg/generated" ]]; then
+  cp -a pkg/generated "${TMPDIR}/pkg_generated"
+fi
+
 # ---------------------------------------------------------------------------
 # 2. Run the generators (same commands as `make update`).
 # ---------------------------------------------------------------------------
 ${CONTROLLER_GEN} object:headerFile="hack/boilerplate.go.txt" paths="./..."
 hack/update-install-manifest.sh "${CONTROLLER_GEN}"
+hack/update-codegen.sh
 
 # ---------------------------------------------------------------------------
 # 3. Compare generated files and restore originals.
@@ -62,6 +68,23 @@ for f in "${GENERATED_FILES[@]}"; do
     ret=1
   fi
 done
+
+# ---------------------------------------------------------------------------
+# 3b. Compare generated client code and restore originals.
+# ---------------------------------------------------------------------------
+if [[ -d "${TMPDIR}/pkg_generated" ]]; then
+  if ! diff -rq "${TMPDIR}/pkg_generated" pkg/generated >/dev/null 2>&1; then
+    echo "ERROR: pkg/generated is out of date"
+    diff -r "${TMPDIR}/pkg_generated" pkg/generated || true
+    ret=1
+  fi
+  rm -rf pkg/generated
+  cp -a "${TMPDIR}/pkg_generated" pkg/generated
+elif [[ -d "pkg/generated" ]]; then
+  echo "ERROR: pkg/generated needs to be generated (directory did not exist before)"
+  rm -rf pkg/generated
+  ret=1
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Verify go fmt (use gofmt -l to list, without modifying files).

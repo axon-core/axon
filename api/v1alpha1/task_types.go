@@ -150,6 +150,7 @@ type TaskStatus struct {
 	Outputs []string `json:"outputs,omitempty"`
 }
 
+// +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
