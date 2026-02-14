@@ -154,6 +154,10 @@ type TaskStatus struct {
 	// (e.g. branch names, PR URLs).
 	// +optional
 	Outputs []string `json:"outputs,omitempty"`
+
+	// Results contains structured key-value outputs produced by the agent.
+	// +optional
+	Results map[string]string `json:"results,omitempty"`
 }
 
 // +genclient

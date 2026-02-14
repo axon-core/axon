@@ -69,8 +69,19 @@ reads Pod logs and extracts lines between the following markers:
 ```
 ---AXON_OUTPUTS_START---
 branch: <branch-name>
-https://github.com/org/repo/pull/123
+pr: https://github.com/org/repo/pull/123
 ---AXON_OUTPUTS_END---
+```
+
+Output lines use `key: value` format (separated by `: `). The controller stores
+these lines in `TaskStatus.Outputs` and also parses them into a
+`TaskStatus.Results` map for structured access. Lines without `: ` are kept
+in Outputs but skipped when building Results.
+
+Results can be referenced in dependency prompt templates:
+
+```
+{{ index .Deps "task-a" "Results" "branch" }}
 ```
 
 The shared script `/axon/capture-outputs.sh` is included in all reference images
@@ -93,8 +104,6 @@ exit $AGENT_EXIT_CODE
 
 Also use `set -uo pipefail` (without `-e`) so the capture script runs even if
 the agent exits non-zero.
-
-Captured outputs are stored in `TaskStatus.Outputs` and displayed by the CLI.
 
 ## Reference implementations
 
