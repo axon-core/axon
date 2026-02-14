@@ -55,6 +55,7 @@ test-e2e: ginkgo ## Run e2e tests (requires cluster and CLAUDE_CODE_OAUTH_TOKEN)
 update: controller-gen yamlfmt shfmt ## Run all generators and formatters.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	hack/update-install-manifest.sh $(CONTROLLER_GEN)
+	hack/update-codegen.sh
 	go fmt ./...
 	go mod tidy
 	$(YAMLFMT) .
