@@ -2152,6 +2152,75 @@ func TestBuildJob_AgentConfigGemini(t *testing.T) {
 	}
 }
 
+func TestBuildJob_AgentConfigOpenCode(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-opencode-agentconfig",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeOpenCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		AgentsMD: "Always run tests before committing.",
+		Plugins: []axonv1alpha1.PluginSpec{
+			{
+				Name: "dev-tools",
+				Skills: []axonv1alpha1.SkillDefinition{
+					{Name: "test", Content: "Run unit tests first"},
+				},
+				Agents: []axonv1alpha1.AgentDefinition{
+					{Name: "linter", Content: "You are a code linter"},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	// AXON_AGENTS_MD should be set for opencode tasks.
+	if envMap["AXON_AGENTS_MD"] != "Always run tests before committing." {
+		t.Errorf("Expected AXON_AGENTS_MD=%q, got %q", "Always run tests before committing.", envMap["AXON_AGENTS_MD"])
+	}
+
+	// AXON_PLUGIN_DIR should be set for opencode tasks.
+	if envMap["AXON_PLUGIN_DIR"] != PluginMountPath {
+		t.Errorf("Expected AXON_PLUGIN_DIR=%q, got %q", PluginMountPath, envMap["AXON_PLUGIN_DIR"])
+	}
+
+	// Should have plugin volume and init container.
+	if len(job.Spec.Template.Spec.Volumes) != 1 {
+		t.Errorf("Expected 1 volume, got %d", len(job.Spec.Template.Spec.Volumes))
+	}
+	if len(job.Spec.Template.Spec.InitContainers) != 1 {
+		t.Errorf("Expected 1 init container, got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+
+	// Container name should be the agent type.
+	if container.Name != AgentTypeOpenCode {
+		t.Errorf("Expected container name %q, got %q", AgentTypeOpenCode, container.Name)
+	}
+}
+
 func TestBuildJob_AgentConfigPluginNamePathTraversal(t *testing.T) {
 	builder := NewJobBuilder()
 	task := &axonv1alpha1.Task{
