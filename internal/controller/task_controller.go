@@ -405,7 +405,7 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 
 	// Check if we should retry capturing outputs for an already-completed task
 	retryOutputs := !phaseChanged &&
-		len(task.Status.Outputs) == 0 &&
+		len(task.Status.Outputs) == 0 && len(task.Status.Results) == 0 &&
 		task.Status.CompletionTime != nil &&
 		time.Since(task.Status.CompletionTime.Time) < outputRetryWindow
 
@@ -416,18 +416,19 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 	// Read outputs from Pod logs when transitioning to a terminal phase
 	// or retrying capture for an already-completed task
 	var outputs []string
+	var results map[string]string
 	if setCompletionTime || retryOutputs {
 		effectivePodName := podName
 		if effectivePodName == "" {
 			effectivePodName = task.Status.PodName
 		}
 		containerName := task.Spec.Type
-		outputs = r.readOutputs(ctx, task.Namespace, effectivePodName, containerName)
+		outputs, results = r.readOutputs(ctx, task.Namespace, effectivePodName, containerName)
 	}
 
 	// When retrying output capture, skip the status update if we still
 	// have nothing — just requeue to try again later.
-	if retryOutputs && outputs == nil {
+	if retryOutputs && outputs == nil && results == nil {
 		return ctrl.Result{RequeueAfter: outputRetryInterval}, nil
 	}
 
@@ -448,10 +449,12 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 			if setCompletionTime {
 				task.Status.CompletionTime = &now
 				task.Status.Outputs = outputs
+				task.Status.Results = results
 			}
 		}
-		if retryOutputs && outputs != nil {
+		if retryOutputs && (outputs != nil || results != nil) {
 			task.Status.Outputs = outputs
+			task.Status.Results = results
 		}
 		return r.Status().Update(ctx, task)
 	}); err != nil {
@@ -466,12 +469,12 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 		taskDurationSeconds.WithLabelValues(task.Namespace, task.Spec.Type, string(newPhase)).Observe(duration)
 	}
 
-	if setCompletionTime && outputs != nil {
-		r.recordEvent(task, corev1.EventTypeNormal, "OutputsCaptured", "Captured %d outputs from agent", len(outputs))
+	if setCompletionTime && (outputs != nil || results != nil) {
+		r.recordEvent(task, corev1.EventTypeNormal, "OutputsCaptured", "Captured %d outputs and %d results from agent", len(outputs), len(results))
 	}
 
 	// Requeue to retry output capture when the initial attempt got nothing
-	if setCompletionTime && outputs == nil {
+	if setCompletionTime && outputs == nil && results == nil {
 		return ctrl.Result{RequeueAfter: outputRetryInterval}, nil
 	}
 
@@ -501,10 +504,10 @@ func (r *TaskReconciler) ttlExpired(task *axonv1alpha1.Task) (bool, time.Duratio
 	return false, remaining
 }
 
-// readOutputs reads Pod logs and extracts output markers.
-func (r *TaskReconciler) readOutputs(ctx context.Context, namespace, podName, container string) []string {
+// readOutputs reads Pod logs and extracts output markers and structured results.
+func (r *TaskReconciler) readOutputs(ctx context.Context, namespace, podName, container string) ([]string, map[string]string) {
 	if r.Clientset == nil || podName == "" {
-		return nil
+		return nil, nil
 	}
 	logger := log.FromContext(ctx)
 
@@ -516,17 +519,18 @@ func (r *TaskReconciler) readOutputs(ctx context.Context, namespace, podName, co
 	stream, err := req.Stream(ctx)
 	if err != nil {
 		logger.V(1).Info("Unable to read Pod logs for outputs", "pod", podName, "error", err)
-		return nil
+		return nil, nil
 	}
 	defer stream.Close()
 
 	data, err := io.ReadAll(stream)
 	if err != nil {
 		logger.V(1).Info("Unable to read Pod log stream", "pod", podName, "error", err)
-		return nil
+		return nil, nil
 	}
 
-	return ParseOutputs(string(data))
+	outputs := ParseOutputs(string(data))
+	return outputs, ResultsFromOutputs(outputs)
 }
 
 // recordEvent records a Kubernetes Event on the given object if a Recorder is configured.
@@ -673,6 +677,7 @@ func (r *TaskReconciler) resolvePromptTemplate(ctx context.Context, task *axonv1
 		}
 		deps[depName] = map[string]interface{}{
 			"Outputs": depTask.Status.Outputs,
+			"Results": depTask.Status.Results,
 			"Name":    depName,
 		}
 	}

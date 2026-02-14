@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -64,6 +65,21 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 		printField(w, "Outputs", t.Status.Outputs[0])
 		for _, o := range t.Status.Outputs[1:] {
 			fmt.Fprintf(w, "%-20s%s\n", "", o)
+		}
+	}
+	if len(t.Status.Results) > 0 {
+		keys := make([]string, 0, len(t.Status.Results))
+		for k := range t.Status.Results {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for i, k := range keys {
+			entry := fmt.Sprintf("%s=%s", k, t.Status.Results[k])
+			if i == 0 {
+				printField(w, "Results", entry)
+			} else {
+				fmt.Fprintf(w, "%-20s%s\n", "", entry)
+			}
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -33,32 +34,32 @@ func TestParseOutputs(t *testing.T) {
 		{
 			name: "branch and PR URL",
 			logData: "---AXON_OUTPUTS_START---\nbranch: axon-task-123\n" +
-				"https://github.com/org/repo/pull/456\n---AXON_OUTPUTS_END---\n",
+				"pr: https://github.com/org/repo/pull/456\n---AXON_OUTPUTS_END---\n",
 			expected: []string{
 				"branch: axon-task-123",
-				"https://github.com/org/repo/pull/456",
+				"pr: https://github.com/org/repo/pull/456",
 			},
 		},
 		{
 			name: "branch and multiple PR URLs",
 			logData: "---AXON_OUTPUTS_START---\nbranch: feature-branch\n" +
-				"https://github.com/org/repo/pull/1\n" +
-				"https://github.com/org/repo/pull/2\n---AXON_OUTPUTS_END---\n",
+				"pr: https://github.com/org/repo/pull/1\n" +
+				"pr: https://github.com/org/repo/pull/2\n---AXON_OUTPUTS_END---\n",
 			expected: []string{
 				"branch: feature-branch",
-				"https://github.com/org/repo/pull/1",
-				"https://github.com/org/repo/pull/2",
+				"pr: https://github.com/org/repo/pull/1",
+				"pr: https://github.com/org/repo/pull/2",
 			},
 		},
 		{
 			name: "markers in noisy log data",
 			logData: "Starting agent...\nProcessing task...\nDone.\n" +
 				"---AXON_OUTPUTS_START---\nbranch: my-branch\n" +
-				"https://github.com/org/repo/pull/99\n---AXON_OUTPUTS_END---\n" +
+				"pr: https://github.com/org/repo/pull/99\n---AXON_OUTPUTS_END---\n" +
 				"Exiting with code 0\n",
 			expected: []string{
 				"branch: my-branch",
-				"https://github.com/org/repo/pull/99",
+				"pr: https://github.com/org/repo/pull/99",
 			},
 		},
 		{
@@ -90,6 +91,82 @@ func TestParseOutputs(t *testing.T) {
 				if result[i] != v {
 					t.Errorf("item %d: expected %q, got %q", i, v, result[i])
 				}
+			}
+		})
+	}
+}
+
+func TestResultsFromOutputs(t *testing.T) {
+	tests := []struct {
+		name     string
+		outputs  []string
+		expected map[string]string
+	}{
+		{
+			name:     "nil outputs",
+			outputs:  nil,
+			expected: nil,
+		},
+		{
+			name:     "empty outputs",
+			outputs:  []string{},
+			expected: nil,
+		},
+		{
+			name:    "branch only",
+			outputs: []string{"branch: feature-123"},
+			expected: map[string]string{
+				"branch": "feature-123",
+			},
+		},
+		{
+			name:    "branch and pr",
+			outputs: []string{"branch: feature-123", "pr: https://github.com/org/repo/pull/1"},
+			expected: map[string]string{
+				"branch": "feature-123",
+				"pr":     "https://github.com/org/repo/pull/1",
+			},
+		},
+		{
+			name:    "duplicate keys use last value",
+			outputs: []string{"pr: https://github.com/org/repo/pull/1", "pr: https://github.com/org/repo/pull/2"},
+			expected: map[string]string{
+				"pr": "https://github.com/org/repo/pull/2",
+			},
+		},
+		{
+			name:     "lines without colon-space are skipped",
+			outputs:  []string{"no-separator-here"},
+			expected: nil,
+		},
+		{
+			name:    "mixed valid and invalid lines",
+			outputs: []string{"branch: main", "bare-line", "pr: https://example.com/pull/1"},
+			expected: map[string]string{
+				"branch": "main",
+				"pr":     "https://example.com/pull/1",
+			},
+		},
+		{
+			name:    "value contains colon-space",
+			outputs: []string{"message: hello: world"},
+			expected: map[string]string{
+				"message": "hello: world",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ResultsFromOutputs(tt.outputs)
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("expected nil, got %v", result)
+				}
+				return
+			}
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("expected %v, got %v", tt.expected, result)
 			}
 		})
 	}

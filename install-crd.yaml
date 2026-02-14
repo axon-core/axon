@@ -507,6 +507,12 @@ spec:
               podName:
                 description: PodName is the name of the Pod running the Task.
                 type: string
+              results:
+                additionalProperties:
+                  type: string
+                description: Results contains structured key-value outputs produced
+                  by the agent.
+                type: object
               startTime:
                 description: StartTime is when the Task started running.
                 format: date-time
