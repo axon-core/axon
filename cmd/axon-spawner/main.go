@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -118,6 +119,37 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		return fmt.Errorf("fetching TaskSpawner: %w", err)
 	}
 
+	// Check if suspended
+	if ts.Spec.Suspend != nil && *ts.Spec.Suspend {
+		log.Info("TaskSpawner is suspended, skipping cycle")
+		if ts.Status.Phase != axonv1alpha1.TaskSpawnerPhaseSuspended {
+			// Re-fetch to get the latest resource version before status update
+			if err := cl.Get(ctx, key, &ts); err != nil {
+				return fmt.Errorf("re-fetching TaskSpawner for suspend status: %w", err)
+			}
+			// Re-validate after re-fetch: user may have un-suspended between checks
+			if ts.Spec.Suspend == nil || !*ts.Spec.Suspend {
+				return nil
+			}
+			if ts.Status.Phase == axonv1alpha1.TaskSpawnerPhaseSuspended {
+				return nil
+			}
+			ts.Status.Phase = axonv1alpha1.TaskSpawnerPhaseSuspended
+			ts.Status.Message = "Suspended by user"
+			meta.SetStatusCondition(&ts.Status.Conditions, metav1.Condition{
+				Type:               "Suspended",
+				Status:             metav1.ConditionTrue,
+				Reason:             "UserSuspended",
+				Message:            "TaskSpawner is suspended by user",
+				ObservedGeneration: ts.Generation,
+			})
+			if err := cl.Status().Update(ctx, &ts); err != nil {
+				return fmt.Errorf("updating status for suspend: %w", err)
+			}
+		}
+		return nil
+	}
+
 	items, err := src.Discover(ctx)
 	if err != nil {
 		return fmt.Errorf("discovering items: %w", err)
@@ -157,11 +189,22 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		maxConcurrency = *ts.Spec.MaxConcurrency
 	}
 
+	maxTotalTasks := 0
+	if ts.Spec.MaxTotalTasks != nil {
+		maxTotalTasks = int(*ts.Spec.MaxTotalTasks)
+	}
+
 	newTasksCreated := 0
 	for _, item := range newItems {
 		// Enforce max concurrency limit
 		if maxConcurrency > 0 && int32(activeTasks) >= maxConcurrency {
 			log.Info("Max concurrency reached, skipping remaining items", "activeTasks", activeTasks, "maxConcurrency", maxConcurrency)
+			break
+		}
+
+		// Enforce max total tasks limit
+		if maxTotalTasks > 0 && ts.Status.TotalTasksCreated+newTasksCreated >= maxTotalTasks {
+			log.Info("Task budget exhausted, skipping remaining items", "totalCreated", ts.Status.TotalTasksCreated+newTasksCreated, "maxTotalTasks", maxTotalTasks)
 			break
 		}
 
@@ -233,6 +276,34 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 	ts.Status.TotalTasksCreated += newTasksCreated
 	ts.Status.ActiveTasks = activeTasks
 	ts.Status.Message = fmt.Sprintf("Discovered %d items, created %d tasks total", ts.Status.TotalDiscovered, ts.Status.TotalTasksCreated)
+
+	// Clear Suspended condition since we are running
+	meta.SetStatusCondition(&ts.Status.Conditions, metav1.Condition{
+		Type:               "Suspended",
+		Status:             metav1.ConditionFalse,
+		Reason:             "Running",
+		Message:            "TaskSpawner is running",
+		ObservedGeneration: ts.Generation,
+	})
+
+	// Set TaskBudgetExhausted condition
+	if maxTotalTasks > 0 && ts.Status.TotalTasksCreated >= maxTotalTasks {
+		meta.SetStatusCondition(&ts.Status.Conditions, metav1.Condition{
+			Type:               "TaskBudgetExhausted",
+			Status:             metav1.ConditionTrue,
+			Reason:             "BudgetReached",
+			Message:            fmt.Sprintf("Total tasks created (%d) has reached maxTotalTasks (%d)", ts.Status.TotalTasksCreated, maxTotalTasks),
+			ObservedGeneration: ts.Generation,
+		})
+	} else {
+		meta.SetStatusCondition(&ts.Status.Conditions, metav1.Condition{
+			Type:               "TaskBudgetExhausted",
+			Status:             metav1.ConditionFalse,
+			Reason:             "BudgetAvailable",
+			Message:            "Task budget has not been exhausted",
+			ObservedGeneration: ts.Generation,
+		})
+	}
 
 	if err := cl.Status().Update(ctx, &ts); err != nil {
 		return fmt.Errorf("updating TaskSpawner status: %w", err)

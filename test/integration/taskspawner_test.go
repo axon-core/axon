@@ -874,6 +874,392 @@ var _ = Describe("TaskSpawner Controller", func() {
 		})
 	})
 
+	Context("When creating a TaskSpawner with suspend=true", func() {
+		It("Should create a Deployment with 0 replicas and set phase to Suspended", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-suspend",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-suspend",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner with suspend=true")
+			suspend := true
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-spawner-suspend",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							State: "open",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+						WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+							Name: "test-workspace-suspend",
+						},
+					},
+					PollInterval: "5m",
+					Suspend:      &suspend,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			By("Verifying a Deployment is created with 0 replicas")
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdDeploy := &appsv1.Deployment{}
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Expect(createdDeploy.Spec.Replicas).NotTo(BeNil())
+			Expect(*createdDeploy.Spec.Replicas).To(Equal(int32(0)))
+
+			By("Verifying TaskSpawner phase is Suspended")
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhaseSuspended))
+
+			Expect(createdTS.Status.Message).To(Equal("Suspended by user"))
+		})
+	})
+
+	Context("When resuming a suspended TaskSpawner", func() {
+		It("Should scale the Deployment to 1 replica and set phase to Running", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-resume",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-resume",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner with suspend=true")
+			suspend := true
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-spawner-resume",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							State: "open",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+						WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+							Name: "test-workspace-resume",
+						},
+					},
+					PollInterval: "5m",
+					Suspend:      &suspend,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+
+			By("Waiting for Deployment to be created with 0 replicas")
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				if err != nil {
+					return false
+				}
+				return createdDeploy.Spec.Replicas != nil && *createdDeploy.Spec.Replicas == 0
+			}, timeout, interval).Should(BeTrue())
+
+			By("Waiting for phase to be Suspended")
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhaseSuspended))
+
+			By("Resuming the TaskSpawner by setting suspend=false")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return err
+				}
+				resume := false
+				createdTS.Spec.Suspend = &resume
+				return k8sClient.Update(ctx, createdTS)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying the Deployment is scaled to 1 replica")
+			Eventually(func() int32 {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				if err != nil || createdDeploy.Spec.Replicas == nil {
+					return -1
+				}
+				return *createdDeploy.Spec.Replicas
+			}, timeout, interval).Should(Equal(int32(1)))
+
+			By("Verifying TaskSpawner phase is Running")
+			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhaseRunning))
+
+			Expect(createdTS.Status.Message).To(Equal("Resumed"))
+		})
+	})
+
+	Context("When creating a TaskSpawner with maxTotalTasks", func() {
+		It("Should store maxTotalTasks in spec", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-maxtotal",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-maxtotal",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner with maxTotalTasks=10")
+			maxTotal := int32(10)
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-spawner-maxtotal",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							State: "open",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+						WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+							Name: "test-workspace-maxtotal",
+						},
+					},
+					PollInterval:  "5m",
+					MaxTotalTasks: &maxTotal,
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			By("Verifying maxTotalTasks is stored in spec")
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+			Expect(createdTS.Spec.MaxTotalTasks).NotTo(BeNil())
+			Expect(*createdTS.Spec.MaxTotalTasks).To(Equal(int32(10)))
+
+			By("Verifying a Deployment is created")
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("When suspending a running TaskSpawner", func() {
+		It("Should scale the Deployment to 0 replicas and emit DeploymentUpdated event", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-suspend-running",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace-suspend-running",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner (not suspended)")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-spawner-suspend-running",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							State: "open",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+						WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+							Name: "test-workspace-suspend-running",
+						},
+					},
+					PollInterval: "5m",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+
+			By("Waiting for Deployment to be created with 1 replica")
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				if err != nil {
+					return false
+				}
+				return createdDeploy.Spec.Replicas != nil && *createdDeploy.Spec.Replicas == 1
+			}, timeout, interval).Should(BeTrue())
+
+			By("Waiting for phase to be Pending")
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhasePending))
+
+			By("Suspending the TaskSpawner")
+			Eventually(func() error {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return err
+				}
+				suspend := true
+				createdTS.Spec.Suspend = &suspend
+				return k8sClient.Update(ctx, createdTS)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying the Deployment is scaled to 0 replicas")
+			Eventually(func() int32 {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				if err != nil || createdDeploy.Spec.Replicas == nil {
+					return -1
+				}
+				return *createdDeploy.Spec.Replicas
+			}, timeout, interval).Should(Equal(int32(0)))
+
+			By("Verifying TaskSpawner phase is Suspended")
+			Eventually(func() axonv1alpha1.TaskSpawnerPhase {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				if err != nil {
+					return ""
+				}
+				return createdTS.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskSpawnerPhaseSuspended))
+
+			By("Verifying DeploymentUpdated event is emitted")
+			Eventually(func() bool {
+				eventList := &corev1.EventList{}
+				err := k8sClient.List(ctx, eventList, client.InNamespace(ns.Name))
+				if err != nil {
+					return false
+				}
+				for _, event := range eventList.Items {
+					if event.InvolvedObject.Name == ts.Name && event.Reason == "DeploymentUpdated" {
+						return true
+					}
+				}
+				return false
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
 	Context("When a TaskSpawner creates a Deployment", func() {
 		It("Should emit a DeploymentCreated event", func() {
 			By("Creating a namespace")

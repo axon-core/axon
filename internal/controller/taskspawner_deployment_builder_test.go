@@ -1,11 +1,18 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestParseGitHubOwnerRepo(t *testing.T) {
@@ -369,5 +376,178 @@ func TestDeploymentBuilder_PAT(t *testing.T) {
 
 	if len(deploy.Spec.Template.Spec.Volumes) != 0 {
 		t.Errorf("expected 0 volumes, got %d", len(deploy.Spec.Template.Spec.Volumes))
+	}
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+func TestUpdateDeployment_SuspendScalesDown(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				GitHubIssues: &axonv1alpha1.GitHubIssues{},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type:         "claude-code",
+				WorkspaceRef: &axonv1alpha1.WorkspaceReference{Name: "ws"},
+			},
+			Suspend: boolPtr(true),
+		},
+	}
+
+	// Build a deployment with replicas=1 (running state)
+	deploy := builder.Build(ts, nil, false)
+	if deploy.Spec.Replicas == nil || *deploy.Spec.Replicas != 1 {
+		t.Fatalf("expected initial Replicas=1, got %v", deploy.Spec.Replicas)
+	}
+
+	// Create a reconciler with a fake client
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(axonv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, deploy).
+		WithStatusSubresource(ts).
+		Build()
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	// Call updateDeployment with desiredReplicas=0 (suspended)
+	ctx := context.Background()
+	if err := r.updateDeployment(ctx, ts, deploy, nil, false, 0); err != nil {
+		t.Fatalf("updateDeployment error: %v", err)
+	}
+
+	// Verify the deployment was updated to 0 replicas
+	var updated appsv1.Deployment
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(deploy), &updated); err != nil {
+		t.Fatalf("getting deployment: %v", err)
+	}
+	if updated.Spec.Replicas == nil || *updated.Spec.Replicas != 0 {
+		t.Errorf("expected Replicas=0 after suspend, got %v", updated.Spec.Replicas)
+	}
+}
+
+func TestUpdateDeployment_ResumeScalesUp(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				GitHubIssues: &axonv1alpha1.GitHubIssues{},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type:         "claude-code",
+				WorkspaceRef: &axonv1alpha1.WorkspaceReference{Name: "ws"},
+			},
+			Suspend: boolPtr(false),
+		},
+	}
+
+	// Build a deployment with replicas=0 (suspended state)
+	deploy := builder.Build(ts, nil, false)
+	zero := int32(0)
+	deploy.Spec.Replicas = &zero
+
+	// Create a reconciler with a fake client
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(axonv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, deploy).
+		WithStatusSubresource(ts).
+		Build()
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	// Call updateDeployment with desiredReplicas=1 (resumed)
+	ctx := context.Background()
+	if err := r.updateDeployment(ctx, ts, deploy, nil, false, 1); err != nil {
+		t.Fatalf("updateDeployment error: %v", err)
+	}
+
+	// Verify the deployment was updated to 1 replica
+	var updated appsv1.Deployment
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(deploy), &updated); err != nil {
+		t.Fatalf("getting deployment: %v", err)
+	}
+	if updated.Spec.Replicas == nil || *updated.Spec.Replicas != 1 {
+		t.Errorf("expected Replicas=1 after resume, got %v", updated.Spec.Replicas)
+	}
+}
+
+func TestUpdateDeployment_NoUpdateWhenReplicasMatch(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				GitHubIssues: &axonv1alpha1.GitHubIssues{},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type:         "claude-code",
+				WorkspaceRef: &axonv1alpha1.WorkspaceReference{Name: "ws"},
+			},
+		},
+	}
+
+	// Build a deployment with replicas=1
+	deploy := builder.Build(ts, nil, false)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(axonv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, deploy).
+		WithStatusSubresource(ts).
+		Build()
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	// Call updateDeployment with desiredReplicas=1 (no change needed)
+	ctx := context.Background()
+	if err := r.updateDeployment(ctx, ts, deploy, nil, false, 1); err != nil {
+		t.Fatalf("updateDeployment error: %v", err)
+	}
+
+	// Verify the deployment still has 1 replica (no unnecessary update)
+	var updated appsv1.Deployment
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(deploy), &updated); err != nil {
+		t.Fatalf("getting deployment: %v", err)
+	}
+	if updated.Spec.Replicas == nil || *updated.Spec.Replicas != 1 {
+		t.Errorf("expected Replicas=1 (unchanged), got %v", updated.Spec.Replicas)
 	}
 }

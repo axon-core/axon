@@ -14,6 +14,8 @@ const (
 	TaskSpawnerPhaseRunning TaskSpawnerPhase = "Running"
 	// TaskSpawnerPhaseFailed means the spawner has failed.
 	TaskSpawnerPhaseFailed TaskSpawnerPhase = "Failed"
+	// TaskSpawnerPhaseSuspended means the spawner is paused by the user.
+	TaskSpawnerPhaseSuspended TaskSpawnerPhase = "Suspended"
 )
 
 // When defines the conditions that trigger task spawning.
@@ -144,6 +146,23 @@ type TaskSpawnerSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	MaxConcurrency *int32 `json:"maxConcurrency,omitempty"`
+
+	// Suspend tells the spawner to stop polling and creating tasks.
+	// Existing running Tasks are not affected (they continue to completion).
+	// When set back to false, the spawner resumes from where it left off.
+	// Defaults to false.
+	// +optional
+	// +kubebuilder:default=false
+	Suspend *bool `json:"suspend,omitempty"`
+
+	// MaxTotalTasks limits the total number of Tasks this spawner will create
+	// over its lifetime. Once reached, the spawner stops creating new Tasks
+	// (but continues polling to update status). If unset or zero, there is
+	// no limit. This counter persists across spawner restarts via
+	// status.totalTasksCreated.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MaxTotalTasks *int32 `json:"maxTotalTasks,omitempty"`
 }
 
 // TaskSpawnerStatus defines the observed state of TaskSpawner.
@@ -175,12 +194,21 @@ type TaskSpawnerStatus struct {
 	// Message provides additional information about the current status.
 	// +optional
 	Message string `json:"message,omitempty"`
+
+	// Conditions provides detailed status information.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 // +genclient
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Workspace",type=string,JSONPath=`.spec.taskTemplate.workspaceRef.name`
+// +kubebuilder:printcolumn:name="Suspend",type=boolean,JSONPath=`.spec.suspend`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Active",type=integer,JSONPath=`.status.activeTasks`
 // +kubebuilder:printcolumn:name="Discovered",type=integer,JSONPath=`.status.totalDiscovered`
