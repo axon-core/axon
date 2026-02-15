@@ -16,6 +16,7 @@ func newCreateAgentConfigCommand(cfg *ClientConfig) *cobra.Command {
 		agentsMD   string
 		skillFlags []string
 		agentFlags []string
+		mcpFlags   []string
 		dryRun     bool
 	)
 
@@ -74,6 +75,19 @@ func newCreateAgentConfigCommand(cfg *ClientConfig) *cobra.Command {
 				acSpec.Plugins = []axonv1alpha1.PluginSpec{plugin}
 			}
 
+			mcpSeen := make(map[string]bool, len(mcpFlags))
+			for _, m := range mcpFlags {
+				mcpSpec, err := parseMCPFlag(m)
+				if err != nil {
+					return err
+				}
+				if mcpSeen[mcpSpec.Name] {
+					return fmt.Errorf("duplicate --mcp server name %q", mcpSpec.Name)
+				}
+				mcpSeen[mcpSpec.Name] = true
+				acSpec.MCPServers = append(acSpec.MCPServers, mcpSpec)
+			}
+
 			acObj := &axonv1alpha1.AgentConfig{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
@@ -99,6 +113,7 @@ func newCreateAgentConfigCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().StringVar(&agentsMD, "agents-md", "", "agent instructions (content or @file path)")
 	cmd.Flags().StringArrayVar(&skillFlags, "skill", nil, "skill definition as name=content or name=@file")
 	cmd.Flags().StringArrayVar(&agentFlags, "agent", nil, "agent definition as name=content or name=@file")
+	cmd.Flags().StringArrayVar(&mcpFlags, "mcp", nil, "MCP server as name=JSON or name=@file (e.g. github='{\"type\":\"http\",\"url\":\"https://api.githubcopilot.com/mcp/\"}')")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the resource that would be created without submitting it")
 
 	return cmd

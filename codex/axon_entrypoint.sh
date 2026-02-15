@@ -50,6 +50,34 @@ if [ -n "${AXON_PLUGIN_DIR:-}" ] && [ -d "${AXON_PLUGIN_DIR}" ]; then
   ARGS+=("--enable" "skills")
 fi
 
+# Write MCP server configuration to project-scoped config.
+# AXON_MCP_SERVERS contains JSON in .mcp.json format; convert to
+# Codex TOML via a small Node.js helper that is available in the image.
+if [ -n "${AXON_MCP_SERVERS:-}" ]; then
+  mkdir -p ~/.codex
+  node -e '
+const cfg = JSON.parse(process.env.AXON_MCP_SERVERS);
+const servers = cfg.mcpServers || {};
+let toml = "";
+for (const [name, s] of Object.entries(servers)) {
+  toml += `[mcp_servers.${JSON.stringify(name)}]\n`;
+  if (s.command) toml += `command = ${JSON.stringify(s.command)}\n`;
+  if (s.args && s.args.length) toml += `args = ${JSON.stringify(s.args)}\n`;
+  if (s.url) toml += `url = ${JSON.stringify(s.url)}\n`;
+  if (s.headers) {
+    const h = Object.entries(s.headers).map(([k,v]) => `${JSON.stringify(k)} = ${JSON.stringify(v)}`).join(", ");
+    toml += `http_headers = { ${h} }\n`;
+  }
+  if (s.env) {
+    const e = Object.entries(s.env).map(([k,v]) => `${JSON.stringify(k)} = ${JSON.stringify(v)}`).join(", ");
+    toml += `env = { ${e} }\n`;
+  }
+  toml += "\n";
+}
+process.stdout.write(toml);
+' >>~/.codex/config.toml
+fi
+
 codex "${ARGS[@]}" | tee /tmp/agent-output.jsonl
 AGENT_EXIT_CODE=${PIPESTATUS[0]}
 

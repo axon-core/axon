@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
@@ -399,6 +400,17 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 				Value: PluginMountPath,
 			})
 		}
+
+		if len(agentConfig.MCPServers) > 0 {
+			mcpJSON, err := buildMCPServersJSON(agentConfig.MCPServers)
+			if err != nil {
+				return nil, fmt.Errorf("invalid MCP server configuration: %w", err)
+			}
+			mainContainer.Env = append(mainContainer.Env, corev1.EnvVar{
+				Name:  "AXON_MCP_SERVERS",
+				Value: mcpJSON,
+			})
+		}
 	}
 
 	// Apply PodOverrides before constructing the Job so all overrides
@@ -572,4 +584,50 @@ func buildPluginSetupScript(plugins []axonv1alpha1.PluginSpec) (string, error) {
 	}
 
 	return strings.Join(lines, "\n"), nil
+}
+
+// mcpServerJSON represents a single MCP server entry in the .mcp.json
+// format used by Claude Code and other agents. Fields are omitted when
+// empty so that the resulting JSON stays minimal.
+type mcpServerJSON struct {
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+}
+
+// buildMCPServersJSON converts MCPServerSpec entries into a JSON string
+// that matches the .mcp.json format: {"mcpServers":{"name":{...},...}}.
+func buildMCPServersJSON(servers []axonv1alpha1.MCPServerSpec) (string, error) {
+	mcpMap := make(map[string]mcpServerJSON, len(servers))
+	for _, s := range servers {
+		if s.Name == "" {
+			return "", fmt.Errorf("MCP server name is empty")
+		}
+		if err := sanitizeComponentName(s.Name, "MCP server"); err != nil {
+			return "", err
+		}
+		if _, exists := mcpMap[s.Name]; exists {
+			return "", fmt.Errorf("duplicate MCP server name %q", s.Name)
+		}
+		entry := mcpServerJSON{
+			Type:    s.Type,
+			Command: s.Command,
+			Args:    s.Args,
+			URL:     s.URL,
+			Headers: s.Headers,
+			Env:     s.Env,
+		}
+		mcpMap[s.Name] = entry
+	}
+	wrapper := struct {
+		MCPServers map[string]mcpServerJSON `json:"mcpServers"`
+	}{MCPServers: mcpMap}
+	data, err := json.Marshal(wrapper)
+	if err != nil {
+		return "", fmt.Errorf("marshalling MCP servers: %w", err)
+	}
+	return string(data), nil
 }

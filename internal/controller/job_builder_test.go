@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -2566,6 +2567,446 @@ func TestBuildJob_AxonAgentTypeAlwaysSet(t *testing.T) {
 			}
 			if !found {
 				t.Error("Expected AXON_AGENT_TYPE env var to be set")
+			}
+		})
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServers(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name: "github",
+				Type: "http",
+				URL:  "https://api.githubcopilot.com/mcp/",
+			},
+			{
+				Name:    "local-db",
+				Type:    "stdio",
+				Command: "npx",
+				Args:    []string{"-y", "@bytebase/dbhub"},
+				Env:     map[string]string{"DSN": "postgres://localhost/db"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	// AXON_MCP_SERVERS should be set.
+	var mcpJSON string
+	for _, env := range container.Env {
+		if env.Name == "AXON_MCP_SERVERS" {
+			mcpJSON = env.Value
+		}
+	}
+	if mcpJSON == "" {
+		t.Fatal("Expected AXON_MCP_SERVERS env var to be set")
+	}
+
+	// Verify the JSON structure matches .mcp.json format.
+	var parsed struct {
+		MCPServers map[string]struct {
+			Type    string            `json:"type"`
+			Command string            `json:"command"`
+			Args    []string          `json:"args"`
+			URL     string            `json:"url"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(mcpJSON), &parsed); err != nil {
+		t.Fatalf("Failed to parse AXON_MCP_SERVERS JSON: %v", err)
+	}
+
+	if len(parsed.MCPServers) != 2 {
+		t.Fatalf("Expected 2 MCP servers, got %d", len(parsed.MCPServers))
+	}
+
+	github, ok := parsed.MCPServers["github"]
+	if !ok {
+		t.Fatal("Expected 'github' MCP server entry")
+	}
+	if github.Type != "http" {
+		t.Errorf("Expected github type 'http', got %q", github.Type)
+	}
+	if github.URL != "https://api.githubcopilot.com/mcp/" {
+		t.Errorf("Expected github URL, got %q", github.URL)
+	}
+
+	localDB, ok := parsed.MCPServers["local-db"]
+	if !ok {
+		t.Fatal("Expected 'local-db' MCP server entry")
+	}
+	if localDB.Type != "stdio" {
+		t.Errorf("Expected local-db type 'stdio', got %q", localDB.Type)
+	}
+	if localDB.Command != "npx" {
+		t.Errorf("Expected local-db command 'npx', got %q", localDB.Command)
+	}
+	if len(localDB.Args) != 2 || localDB.Args[0] != "-y" || localDB.Args[1] != "@bytebase/dbhub" {
+		t.Errorf("Expected local-db args [-y @bytebase/dbhub], got %v", localDB.Args)
+	}
+	if localDB.Env["DSN"] != "postgres://localhost/db" {
+		t.Errorf("Expected local-db env DSN, got %v", localDB.Env)
+	}
+
+	// No extra volumes or init containers should be created for MCP.
+	if len(job.Spec.Template.Spec.Volumes) != 0 {
+		t.Errorf("Expected no volumes for MCP-only config, got %d", len(job.Spec.Template.Spec.Volumes))
+	}
+	if len(job.Spec.Template.Spec.InitContainers) != 0 {
+		t.Errorf("Expected no init containers for MCP-only config, got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersWithHTTPHeaders(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-headers",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name:    "secure-api",
+				Type:    "http",
+				URL:     "https://mcp.example.com/mcp",
+				Headers: map[string]string{"Authorization": "Bearer token123"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	var mcpJSON string
+	for _, env := range container.Env {
+		if env.Name == "AXON_MCP_SERVERS" {
+			mcpJSON = env.Value
+		}
+	}
+	if mcpJSON == "" {
+		t.Fatal("Expected AXON_MCP_SERVERS env var to be set")
+	}
+
+	var parsed struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(mcpJSON), &parsed); err != nil {
+		t.Fatalf("Failed to parse AXON_MCP_SERVERS JSON: %v", err)
+	}
+
+	secureAPI, ok := parsed.MCPServers["secure-api"]
+	if !ok {
+		t.Fatal("Expected 'secure-api' MCP server entry")
+	}
+	if secureAPI.Headers["Authorization"] != "Bearer token123" {
+		t.Errorf("Expected Authorization header, got %v", secureAPI.Headers)
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersWithPluginsAndAgentsMD(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-full",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		AgentsMD: "Follow TDD",
+		Plugins: []axonv1alpha1.PluginSpec{
+			{
+				Name: "tools",
+				Skills: []axonv1alpha1.SkillDefinition{
+					{Name: "deploy", Content: "Deploy content"},
+				},
+			},
+		},
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name: "github",
+				Type: "http",
+				URL:  "https://api.githubcopilot.com/mcp/",
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	// All three should be set: AXON_AGENTS_MD, AXON_PLUGIN_DIR, AXON_MCP_SERVERS.
+	if envMap["AXON_AGENTS_MD"] != "Follow TDD" {
+		t.Errorf("Expected AXON_AGENTS_MD=%q, got %q", "Follow TDD", envMap["AXON_AGENTS_MD"])
+	}
+	if envMap["AXON_PLUGIN_DIR"] != PluginMountPath {
+		t.Errorf("Expected AXON_PLUGIN_DIR=%q, got %q", PluginMountPath, envMap["AXON_PLUGIN_DIR"])
+	}
+	if envMap["AXON_MCP_SERVERS"] == "" {
+		t.Error("Expected AXON_MCP_SERVERS to be set")
+	}
+
+	// Should have plugin volume and init container.
+	if len(job.Spec.Template.Spec.Volumes) != 1 {
+		t.Errorf("Expected 1 volume (plugin only), got %d", len(job.Spec.Template.Spec.Volumes))
+	}
+	if len(job.Spec.Template.Spec.InitContainers) != 1 {
+		t.Errorf("Expected 1 init container (plugin-setup), got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersCodex(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-codex",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCodex,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "openai-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name: "github",
+				Type: "http",
+				URL:  "https://api.githubcopilot.com/mcp/",
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	foundMCP := false
+	for _, env := range container.Env {
+		if env.Name == "AXON_MCP_SERVERS" {
+			foundMCP = true
+		}
+	}
+	if !foundMCP {
+		t.Error("Expected AXON_MCP_SERVERS env var to be set for codex")
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersGemini(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-gemini",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeGemini,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "gemini-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name: "github",
+				Type: "http",
+				URL:  "https://api.githubcopilot.com/mcp/",
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	foundMCP := false
+	for _, env := range container.Env {
+		if env.Name == "AXON_MCP_SERVERS" {
+			foundMCP = true
+		}
+	}
+	if !foundMCP {
+		t.Error("Expected AXON_MCP_SERVERS env var to be set for gemini")
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersEmptyName(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-empty-name",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{
+				Name: "",
+				Type: "http",
+				URL:  "https://example.com/mcp",
+			},
+		},
+	}
+
+	_, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err == nil {
+		t.Fatal("Expected Build() to fail for empty MCP server name, got nil")
+	}
+	if !strings.Contains(err.Error(), "MCP server name is empty") {
+		t.Errorf("Expected empty name error, got: %v", err)
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServersDuplicateName(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-mcp-dup",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		MCPServers: []axonv1alpha1.MCPServerSpec{
+			{Name: "github", Type: "http", URL: "https://api.githubcopilot.com/mcp/"},
+			{Name: "github", Type: "sse", URL: "https://other.example.com/sse"},
+		},
+	}
+
+	_, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err == nil {
+		t.Fatal("Expected Build() to fail for duplicate MCP server name, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate MCP server name") {
+		t.Errorf("Expected duplicate name error, got: %v", err)
+	}
+}
+
+func TestBuildJob_AgentConfigMCPServerNamePathTraversal(t *testing.T) {
+	tests := []struct {
+		name       string
+		mcpName    string
+		wantErrStr string
+	}{
+		{"slash in name", "foo/bar", "contains path separator"},
+		{"backslash in name", `foo\bar`, "contains path separator"},
+		{"dot-dot", "..", "path traversal"},
+		{"dot", ".", "path traversal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := NewJobBuilder()
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-mcp-traversal",
+					Namespace: "default",
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   AgentTypeClaudeCode,
+					Prompt: "Fix issue",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+					},
+				},
+			}
+			agentConfig := &axonv1alpha1.AgentConfigSpec{
+				MCPServers: []axonv1alpha1.MCPServerSpec{
+					{Name: tt.mcpName, Type: "http", URL: "https://example.com/mcp"},
+				},
+			}
+			_, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+			if err == nil {
+				t.Fatal("Expected Build() to fail, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrStr) {
+				t.Errorf("Expected error containing %q, got: %v", tt.wantErrStr, err)
 			}
 		})
 	}
