@@ -59,14 +59,15 @@ See [Examples](#examples) for a full autonomous self-development pipeline.
   - [Inject agent instructions and plugins](#inject-agent-instructions-and-plugins)
   - [Auto-fix GitHub issues with TaskSpawner](#auto-fix-github-issues-with-taskspawner)
   - [Run tasks on a schedule (Cron)](#run-tasks-on-a-schedule-cron)
+  - [Chain tasks with dependencies](#chain-tasks-with-dependencies)
   - [Autonomous self-development pipeline](#autonomous-self-development-pipeline)
   - [Copy-paste YAML manifests](#copy-paste-yaml-manifests)
-- [Framework Capabilities](#framework-capabilities)
 - [Orchestration Patterns](#orchestration-patterns)
 - [Reference](#reference)
+- [Security Considerations](#security-considerations)
+- [Cost and Limits](#cost-and-limits)
 - [Uninstall](#uninstall)
 - [Development](#development)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -74,11 +75,11 @@ See [Examples](#examples) for a full autonomous self-development pipeline.
 
 AI coding agents are evolving from interactive CLI tools into autonomous background workers. Axon provides the necessary infrastructure to manage this transition at scale.
 
-- **Orchestration, not just execution** — Don't just run an agent; manage its entire lifecycle. Use `TaskSpawner` to build event-driven AI workers that react to GitHub issues, PRs, or schedules.
-- **Safe autonomy** — Agents run with `--dangerously-skip-permissions` inside isolated, ephemeral Pods. They get full speed and autonomy within a zero-risk blast radius for your host and infrastructure.
-- **Standardized Interface** — Plug in any agent (Claude, Codex, Gemini, or your own) using a simple container interface. Axon handles the Kubernetes plumbing, credential injection, and workspace management.
-- **Massive Parallelism** — Fan out hundreds of agents across multiple repositories. Kubernetes handles the scheduling, resource management, and queueing.
-- **Observable & CI-Native** — Every agent run is a first-class Kubernetes resource. Monitor progress via `kubectl`, integrate with ArgoCD, or trigger via GitHub Actions.
+- **Orchestration, not just execution** — Don't just run an agent; manage its entire lifecycle. Chain tasks with `dependsOn` and pass results (branch names, PR URLs) between pipeline stages. Use `TaskSpawner` to build event-driven workers that react to GitHub issues, PRs, or schedules.
+- **Host-isolated autonomy** — Each task runs in an isolated, ephemeral Pod with a freshly cloned git workspace. Agents have no access to your host machine — use [scoped tokens and branch protection](#security-considerations) to control repository access.
+- **Standardized Interface** — Plug in any agent (Claude, Codex, Gemini, or your own) using a simple [container interface](docs/agent-image-interface.md). Axon handles credential injection, workspace management, and Kubernetes plumbing.
+- **Scalable Parallelism** — Fan out agents across multiple repositories. Kubernetes handles scheduling, resource management, and queueing — scale is limited by your cluster capacity and API provider quotas.
+- **Observable & CI-Native** — Every agent run is a first-class Kubernetes resource with deterministic outputs (branch names, PR URLs) captured into status. Monitor via `kubectl`, manage via the `axon` CLI or declarative YAML (GitOps-ready), and integrate with ArgoCD or GitHub Actions.
 
 ## How It Works
 
@@ -114,7 +115,7 @@ TaskSpawner watches external sources (e.g., GitHub Issues) and automatically cre
 
 ### Prerequisites
 
-- Kubernetes cluster (1.28+)
+- Kubernetes cluster (1.28+) — don't have one? Create a local cluster with [kind](https://kind.sigs.k8s.io/): `kind create cluster`
 - kubectl configured
 
 ### 1. Install the CLI
@@ -157,6 +158,20 @@ axon init
 #     ref: main
 #     token: <github-token>  # optional, for private repos and pushing changes
 ```
+
+<details>
+<summary>How to get your credentials</summary>
+
+**Claude OAuth token** (recommended for Claude Code):
+Run `claude auth login` locally, then copy the token from `~/.claude/credentials.json`.
+
+**Anthropic API key** (alternative):
+Create one at [console.anthropic.com](https://console.anthropic.com). Set `apiKey` instead of `oauthToken` in your config.
+
+**GitHub token** (for pushing branches and creating PRs):
+Create a [Personal Access Token](https://github.com/settings/tokens) with `repo` scope (and `workflow` if your repo uses GitHub Actions).
+
+</details>
 
 ### 4. Run Your First Task
 
@@ -383,7 +398,7 @@ Create a TaskSpawner that runs on a cron schedule (e.g., every hour):
 apiVersion: axon.io/v1alpha1
 kind: TaskSpawner
 metadata:
-  name: nightly-build-fix
+  name: hourly-test-fix
 spec:
   when:
     cron:
@@ -402,6 +417,59 @@ spec:
 ```bash
 kubectl apply -f cron-spawner.yaml
 ```
+
+### Chain tasks with dependencies
+
+Use `dependsOn` to chain tasks into pipelines. A task in `Waiting` phase stays paused until all its dependencies succeed:
+
+```yaml
+apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: scaffold
+spec:
+  type: claude-code
+  prompt: "Scaffold a new user service with CRUD endpoints"
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  branch: feature/user-service
+---
+apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: write-tests
+spec:
+  type: claude-code
+  prompt: "Write comprehensive tests for the user service"
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  branch: feature/user-service
+  dependsOn: [scaffold]
+```
+
+```bash
+kubectl apply -f pipeline.yaml
+kubectl get tasks -w
+# scaffold     claude-code   Running   ...
+# write-tests  claude-code   Waiting   ...  (waits for scaffold to succeed)
+```
+
+Or via the CLI:
+
+```bash
+axon run -p "Scaffold a new user service" --name scaffold --branch feature/user-service
+axon run -p "Write tests for the user service" --depends-on scaffold --branch feature/user-service
+```
+
+Tasks sharing the same `branch` are serialized automatically — only one runs at a time.
 
 ### Autonomous self-development pipeline
 
@@ -435,21 +503,6 @@ The key pattern here is `excludeLabels: [axon/needs-input]` — this creates a f
 
 The [`examples/`](examples/) directory contains self-contained, ready-to-apply YAML manifests for common use cases — from a simple Task with an API key to a full TaskSpawner driven by GitHub Issues or a cron schedule. Each example includes all required resources and clear `# TODO:` placeholders.
 
-## Framework Capabilities
-
-| Capability | Details |
-|---------|---------|
-| **Event-Driven** | Automatically spawn Tasks from GitHub Issues, PRs, or Cron schedules using `TaskSpawner`. |
-| **Pluggable Agents** | Bring any agent (Claude, Codex, Gemini) or your own custom image by implementing a simple shell interface. |
-| **Safe Autonomy** | Run agents with full system access inside isolated, ephemeral Pods with zero risk to the host. |
-| **Workspace Isolation** | Each run gets a dedicated, freshly cloned git workspace with automated credential injection. |
-| **Standardized Outputs** | Axon captures deterministic outputs (branch names, PR URLs) from agent runs into Kubernetes status. |
-| **Lifecycle Management** | Built-in TTL management, owner references, and automatic cleanup of finished runs. |
-| **Infrastructure Scale** | Fan out hundreds of agents. Kubernetes handles scheduling, resource limits (CPU/MEM), and priorities. |
-| **Credential Safety** | Securely manage API keys and OAuth tokens using Kubernetes Secrets, injected only when needed. |
-| **Observable** | Track agent progress through `Pending` → `Running` → `Succeeded`/`Failed` using standard K8s tools. |
-| **CLI & YAML** | Manage the entire lifecycle via the `axon` CLI or declarative YAML manifests (GitOps ready). |
-
 ## Orchestration Patterns
 
 - **Autonomous Self-Development** — Build a feedback loop where agents pick up issues, write code, self-review, and fix CI flakes until the task is complete.
@@ -473,7 +526,13 @@ The [`examples/`](examples/) directory contains self-contained, ready-to-apply Y
 | `spec.image` | Custom agent image override (see [Agent Image Interface](docs/agent-image-interface.md)) | No |
 | `spec.workspaceRef.name` | Name of a Workspace resource to use | No |
 | `spec.agentConfigRef.name` | Name of an AgentConfig resource to use | No |
+| `spec.dependsOn` | Task names that must succeed before this Task starts (creates `Waiting` phase) | No |
+| `spec.branch` | Git branch to work on; only one Task with the same branch runs at a time (mutex) | No |
 | `spec.ttlSecondsAfterFinished` | Auto-delete task after N seconds (0 for immediate) | No |
+| `spec.podOverrides.resources` | CPU/memory requests and limits for the agent container | No |
+| `spec.podOverrides.activeDeadlineSeconds` | Maximum duration in seconds before the agent pod is terminated | No |
+| `spec.podOverrides.env` | Additional environment variables (built-in vars take precedence on conflict) | No |
+| `spec.podOverrides.nodeSelector` | Node selection labels to constrain which nodes run agent pods | No |
 
 </details>
 
@@ -520,9 +579,14 @@ The [`examples/`](examples/) directory contains self-contained, ready-to-apply Y
 | `spec.taskTemplate.image` | Custom agent image override (see [Agent Image Interface](docs/agent-image-interface.md)) | No |
 | `spec.taskTemplate.agentConfigRef.name` | Name of an AgentConfig resource for spawned Tasks | No |
 | `spec.taskTemplate.promptTemplate` | Go text/template for prompt (see [template variables](#prompttemplate-variables) below) | No |
+| `spec.taskTemplate.dependsOn` | Task names that spawned Tasks depend on | No |
+| `spec.taskTemplate.branch` | Git branch template for spawned Tasks (supports Go template variables, e.g., `axon-task-{{.Number}}`) | No |
 | `spec.taskTemplate.ttlSecondsAfterFinished` | Auto-delete spawned tasks after N seconds | No |
+| `spec.taskTemplate.podOverrides` | Pod customization for spawned Tasks (resources, timeout, env, nodeSelector) | No |
 | `spec.pollInterval` | How often to poll the source (default: `5m`) | No |
-| `spec.maxConcurrency` | Limit max concurrent running tasks | No |
+| `spec.maxConcurrency` | Limit max concurrent running tasks (important for cost control) | No |
+| `spec.maxTotalTasks` | Lifetime limit on total tasks created by this spawner | No |
+| `spec.suspend` | Pause the spawner without deleting it; resume with `spec.suspend: false` (default: `false`) | No |
 
 </details>
 
@@ -552,12 +616,14 @@ The `promptTemplate` field uses Go `text/template` syntax. Available variables d
 
 | Field | Description |
 |-------|-------------|
-| `status.phase` | Current phase: `Pending`, `Running`, `Succeeded`, or `Failed` |
+| `status.phase` | Current phase: `Pending`, `Waiting`, `Running`, `Succeeded`, or `Failed` |
 | `status.jobName` | Name of the Job created for this Task |
 | `status.podName` | Name of the Pod running the Task |
 | `status.startTime` | When the Task started running |
 | `status.completionTime` | When the Task completed |
 | `status.message` | Additional information about the current status |
+| `status.outputs` | Lines captured between `AXON_OUTPUTS` markers (branch names, PR URLs) |
+| `status.results` | Parsed key-value map from outputs (e.g., `results.branch`, `results.pr`) |
 
 </details>
 
@@ -566,13 +632,14 @@ The `promptTemplate` field uses Go `text/template` syntax. Available variables d
 
 | Field | Description |
 |-------|-------------|
-| `status.phase` | Current phase: `Pending`, `Running`, or `Failed` |
+| `status.phase` | Current phase: `Pending`, `Running`, `Suspended`, or `Failed` |
 | `status.deploymentName` | Name of the Deployment running the spawner |
 | `status.totalDiscovered` | Total number of items discovered from the source |
 | `status.totalTasksCreated` | Total number of Tasks created by this spawner |
 | `status.activeTasks` | Number of currently active (non-terminal) Tasks |
 | `status.lastDiscoveryTime` | Last time the source was polled |
 | `status.message` | Additional information about the current status |
+| `status.conditions` | Standard Kubernetes conditions for detailed status |
 
 </details>
 
@@ -664,6 +731,25 @@ The `axon` CLI lets you manage the full lifecycle without writing YAML.
 | `axon get <resource>` | List resources (`tasks`, `taskspawners`, `workspaces`) |
 | `axon delete <resource> <name>` | Delete a resource |
 | `axon logs <task-name> [-f]` | View or stream logs from a task |
+| `axon suspend taskspawner <name>` | Pause a TaskSpawner (stops polling, running tasks continue) |
+| `axon resume taskspawner <name>` | Resume a paused TaskSpawner |
+
+### `axon run` Flags
+
+- `--prompt, -p`: Task prompt (required)
+- `--type, -t`: Agent type (default: `claude-code`)
+- `--model`: Model override
+- `--image`: Custom agent image
+- `--name`: Task name (auto-generated if omitted)
+- `--workspace`: Workspace resource name
+- `--agent-config`: AgentConfig resource name
+- `--depends-on`: Task names this task depends on (repeatable)
+- `--branch`: Git branch to work on
+- `--timeout`: Maximum execution time (e.g., `30m`, `1h`)
+- `--env`: Additional env vars as `NAME=VALUE` (repeatable)
+- `--watch, -w`: Watch task status after creation
+- `--secret`: Pre-created secret name
+- `--credential-type`: Credential type when using `--secret` (default: `api-key`)
 
 ### Common Flags
 
@@ -675,6 +761,58 @@ The `axon` CLI lets you manage the full lifecycle without writing YAML.
 - `--yes, -y`: Skip confirmation prompts
 
 </details>
+
+## Security Considerations
+
+Axon runs agents in isolated, ephemeral Pods — they cannot access your host machine, SSH keys, or other processes. However, agents **do** have write access to your repositories and GitHub API via injected credentials. Here's how to manage the risk:
+
+- **Scope your GitHub tokens.** Use [fine-grained Personal Access Tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#fine-grained-personal-access-tokens) restricted to specific repositories instead of broad `repo`-scoped classic tokens.
+- **Enable branch protection.** Require PR reviews before merging to `main`. Agents can push branches and open PRs, but protected branches prevent direct pushes to your default branch.
+- **Use `maxConcurrency` and `maxTotalTasks`.** Limit how many tasks a TaskSpawner can create to prevent runaway agent activity.
+- **Use `podOverrides.activeDeadlineSeconds`.** Set a timeout to prevent tasks from running indefinitely.
+- **Audit via Kubernetes.** Every agent run is a first-class Kubernetes resource — use `kubectl get tasks` and cluster audit logs to track what was created and by whom.
+
+> **Why `--dangerously-skip-permissions`?** Claude Code uses this flag to run without interactive approval prompts, which is necessary for autonomous execution. The name sounds alarming, but in Axon's context the agent runs inside an ephemeral container with no host access — the flag simply allows non-interactive operation. The actual risk surface is limited to what the injected credentials allow (repository writes, GitHub API calls).
+
+Axon uses standard Kubernetes RBAC — use namespace isolation to separate teams. Each TaskSpawner automatically creates a scoped ServiceAccount and RoleBinding.
+
+## Cost and Limits
+
+Running AI agents costs real money. Here's how to stay in control:
+
+**Model costs vary significantly.** Opus is the most capable but most expensive model. Use `spec.model` (or `model` in config) to choose cheaper models like Sonnet for routine tasks and reserve Opus for complex work.
+
+**Use `maxConcurrency` to cap spend.** Without it, a TaskSpawner can create unlimited concurrent tasks. If 100 issues match your filter on first poll, that's 100 simultaneous agent runs. Always set a limit:
+
+```yaml
+spec:
+  maxConcurrency: 3      # max 3 tasks running at once
+  maxTotalTasks: 50       # stop after 50 total tasks
+```
+
+**Use `podOverrides.activeDeadlineSeconds` to limit runtime.** Set a timeout per task to prevent agents from running indefinitely:
+
+```yaml
+spec:
+  podOverrides:
+    activeDeadlineSeconds: 3600  # kill after 1 hour
+```
+
+Or via the CLI:
+
+```bash
+axon run -p "Fix the bug" --timeout 30m
+```
+
+**Use `suspend` for emergencies.** If costs are spiraling, pause a spawner immediately:
+
+```bash
+axon suspend taskspawner my-spawner
+# ... investigate ...
+axon resume taskspawner my-spawner
+```
+
+**Rate limits.** API providers enforce concurrency and token limits. If a task hits a rate limit mid-execution, it will likely fail. Use `maxConcurrency` to stay within your provider's limits.
 
 ## Uninstall
 
@@ -694,14 +832,6 @@ make test-integration   # integration tests (envtest)
 make test-e2e           # e2e tests (requires cluster)
 make build              # build binary
 make image              # build docker image
-```
-
-## Roadmap
-
-- **Task dependencies** — chain tasks so one waits for another to finish before starting, enabling agent pipelines in pure Kubernetes.
-
-```
- Task: scaffold service ──▶ Task: write tests ──▶ Task: generate docs
 ```
 
 ## Contributing
