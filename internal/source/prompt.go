@@ -23,10 +23,16 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 	if tmplStr == "" {
 		tmplStr = defaultPromptTemplate
 	}
+	return RenderTemplate(tmplStr, item)
+}
 
-	tmpl, err := template.New("prompt").Parse(tmplStr)
+// RenderTemplate renders a Go text/template string with the given work item's fields.
+// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}},
+// {{.Labels}}, {{.Comments}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
+func RenderTemplate(tmplStr string, item WorkItem) (string, error) {
+	tmpl, err := template.New("tmpl").Parse(tmplStr)
 	if err != nil {
-		return "", fmt.Errorf("parsing prompt template: %w", err)
+		return "", fmt.Errorf("parsing template: %w", err)
 	}
 
 	kind := item.Kind
@@ -60,7 +66,7 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("executing prompt template: %w", err)
+		return "", fmt.Errorf("executing template: %w", err)
 	}
 
 	return buf.String(), nil

@@ -645,8 +645,10 @@ spec:
                     - name
                     type: object
                   branch:
-                    description: Branch is the git branch spawned Tasks should work
-                      on.
+                    description: |-
+                      Branch is the git branch spawned Tasks should work on.
+                      Supports Go text/template variables from the work item, e.g. "axon-task-{{.Number}}".
+                      Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
                     type: string
                   credentials:
                     description: Credentials specifies how to authenticate with the

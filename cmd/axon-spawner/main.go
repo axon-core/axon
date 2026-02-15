@@ -247,7 +247,12 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 			task.Spec.DependsOn = ts.Spec.TaskTemplate.DependsOn
 		}
 		if ts.Spec.TaskTemplate.Branch != "" {
-			task.Spec.Branch = ts.Spec.TaskTemplate.Branch
+			branch, err := source.RenderTemplate(ts.Spec.TaskTemplate.Branch, item)
+			if err != nil {
+				log.Error(err, "rendering branch template", "item", item.ID)
+				continue
+			}
+			task.Spec.Branch = branch
 		}
 
 		if err := cl.Create(ctx, task); err != nil {

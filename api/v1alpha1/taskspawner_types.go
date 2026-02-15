@@ -100,6 +100,8 @@ type TaskTemplate struct {
 	DependsOn []string `json:"dependsOn,omitempty"`
 
 	// Branch is the git branch spawned Tasks should work on.
+	// Supports Go text/template variables from the work item, e.g. "axon-task-{{.Number}}".
+	// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
 	// +optional
 	Branch string `json:"branch,omitempty"`
 

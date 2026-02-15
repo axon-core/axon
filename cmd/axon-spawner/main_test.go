@@ -716,6 +716,69 @@ func TestRunCycleWithSource_SuspendedConditionSet(t *testing.T) {
 	}
 }
 
+func TestRunCycleWithSource_BranchTemplateRendered(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.TaskTemplate.Branch = "axon-task-{{.Number}}"
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "42", Number: 42, Title: "Fix login bug"},
+			{ID: "99", Number: 99, Title: "Add feature"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Fatalf("Expected 2 tasks, got %d", len(taskList.Items))
+	}
+
+	branches := make(map[string]string)
+	for _, task := range taskList.Items {
+		branches[task.Name] = task.Spec.Branch
+	}
+	if branches["spawner-42"] != "axon-task-42" {
+		t.Errorf("Expected branch %q for spawner-42, got %q", "axon-task-42", branches["spawner-42"])
+	}
+	if branches["spawner-99"] != "axon-task-99" {
+		t.Errorf("Expected branch %q for spawner-99, got %q", "axon-task-99", branches["spawner-99"])
+	}
+}
+
+func TestRunCycleWithSource_BranchStaticPassedThrough(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.TaskTemplate.Branch = "feature/my-branch"
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Number: 1, Title: "Item 1"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 1 {
+		t.Fatalf("Expected 1 task, got %d", len(taskList.Items))
+	}
+	if taskList.Items[0].Spec.Branch != "feature/my-branch" {
+		t.Errorf("Expected branch %q, got %q", "feature/my-branch", taskList.Items[0].Spec.Branch)
+	}
+}
+
 func TestRunCycleWithSource_NotSuspendedConditionCleared(t *testing.T) {
 	ts := newTaskSpawner("spawner", "default", nil)
 	ts.Spec.Suspend = boolPtr(false)
