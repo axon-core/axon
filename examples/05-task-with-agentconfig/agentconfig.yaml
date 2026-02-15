@@ -13,6 +13,7 @@ spec:
     - Flag any OWASP Top 10 vulnerabilities
     - Suggest tests for untested code paths
     - Keep feedback actionable and concise
+
   # plugins defines Claude Code plugins injected via --plugin-dir.
   # Each plugin can contain skills (slash commands) and agents (sub-agents).
   # Only applicable to claude-code type agents; other agents ignore this.
