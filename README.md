@@ -12,7 +12,7 @@
 - Every agent runs in an isolated, ephemeral Pod — no access to your host machine
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/837cd8d5-4071-42dd-be32-114c649386ff" alt="Axon Demo" width="800">
+  <video src="https://github.com/user-attachments/assets/837cd8d5-4071-42dd-be32-114c649386ff" width="800" controls></video>
 </p>
 
 ```bash
