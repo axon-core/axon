@@ -49,6 +49,28 @@ if [ -n "${AXON_PLUGIN_DIR:-}" ] && [ -d "${AXON_PLUGIN_DIR}" ]; then
   done
 fi
 
+# Write MCP server configuration to Gemini settings.
+# AXON_MCP_SERVERS contains JSON with an "mcpServers" key that Gemini
+# settings.json accepts directly. Merge with existing settings if present.
+if [ -n "${AXON_MCP_SERVERS:-}" ]; then
+  settings_file="$HOME/.gemini/settings.json"
+  if [ -f "$settings_file" ]; then
+    # Merge mcpServers into existing settings using a small Node.js helper.
+    # Read AXON_MCP_SERVERS from the environment to avoid exposing
+    # potentially sensitive headers in process argument lists.
+    node -e '
+const fs = require("fs");
+const existing = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const mcp = JSON.parse(process.env.AXON_MCP_SERVERS);
+existing.mcpServers = Object.assign(existing.mcpServers || {}, mcp.mcpServers || {});
+fs.writeFileSync(process.argv[1], JSON.stringify(existing, null, 2));
+' "$settings_file"
+  else
+    mkdir -p ~/.gemini
+    printf '%s' "$AXON_MCP_SERVERS" >"$settings_file"
+  fi
+fi
+
 gemini "${ARGS[@]}" | tee /tmp/agent-output.jsonl
 AGENT_EXIT_CODE=${PIPESTATUS[0]}
 

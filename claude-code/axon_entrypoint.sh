@@ -36,6 +36,21 @@ if [ -n "${AXON_PLUGIN_DIR:-}" ] && [ -d "${AXON_PLUGIN_DIR}" ]; then
   done
 fi
 
+# Write MCP server configuration to user-scoped ~/.claude.json.
+# This avoids overwriting the repository's own .mcp.json while
+# still making the servers available to Claude Code.
+if [ -n "${AXON_MCP_SERVERS:-}" ]; then
+  node -e '
+const fs = require("fs");
+const cfgPath = require("os").homedir() + "/.claude.json";
+let existing = {};
+try { existing = JSON.parse(fs.readFileSync(cfgPath, "utf8")); } catch {}
+const mcp = JSON.parse(process.env.AXON_MCP_SERVERS);
+existing.mcpServers = Object.assign(existing.mcpServers || {}, mcp.mcpServers || {});
+fs.writeFileSync(cfgPath, JSON.stringify(existing, null, 2));
+'
+fi
+
 claude "${ARGS[@]}" | tee /tmp/agent-output.jsonl
 AGENT_EXIT_CODE=${PIPESTATUS[0]}
 

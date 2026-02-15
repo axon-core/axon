@@ -551,6 +551,15 @@ func TestInstallCommand_DryRun(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Read from the pipe concurrently to avoid deadlock when output
+	// exceeds the OS pipe buffer size (~64KB).
+	var out bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		out.ReadFrom(r)
+		close(done)
+	}()
+
 	if err := cmd.Execute(); err != nil {
 		w.Close()
 		os.Stdout = old
@@ -559,8 +568,7 @@ func TestInstallCommand_DryRun(t *testing.T) {
 
 	w.Close()
 	os.Stdout = old
-	var out bytes.Buffer
-	out.ReadFrom(r)
+	<-done
 	output := out.String()
 
 	if !strings.Contains(output, "CustomResourceDefinition") {

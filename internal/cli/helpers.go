@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+
+	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
 )
 
 // resolveContent returns the content string directly, or if it starts with "@",
@@ -34,4 +37,49 @@ func parseNameContent(s, flagName string) (string, string, error) {
 		return "", "", fmt.Errorf("resolving --%s %q: %w", flagName, parts[0], err)
 	}
 	return parts[0], content, nil
+}
+
+// parseMCPFlag parses a --mcp flag value in the format "name=JSON" or
+// "name=@file" into an MCPServerSpec. The JSON (or file content) must
+// contain at least a "type" field.
+func parseMCPFlag(s string) (axonv1alpha1.MCPServerSpec, error) {
+	parts := strings.SplitN(s, "=", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return axonv1alpha1.MCPServerSpec{}, fmt.Errorf("invalid --mcp value %q: must be name=JSON or name=@file", s)
+	}
+	name := parts[0]
+	content, err := resolveContent(parts[1])
+	if err != nil {
+		return axonv1alpha1.MCPServerSpec{}, fmt.Errorf("resolving --mcp %q: %w", name, err)
+	}
+
+	var raw struct {
+		Type    string            `json:"type"`
+		Command string            `json:"command,omitempty"`
+		Args    []string          `json:"args,omitempty"`
+		URL     string            `json:"url,omitempty"`
+		Headers map[string]string `json:"headers,omitempty"`
+		Env     map[string]string `json:"env,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(content), &raw); err != nil {
+		return axonv1alpha1.MCPServerSpec{}, fmt.Errorf("invalid --mcp %q JSON: %w", name, err)
+	}
+	if raw.Type == "" {
+		return axonv1alpha1.MCPServerSpec{}, fmt.Errorf("--mcp %q: \"type\" field is required", name)
+	}
+	switch raw.Type {
+	case "stdio", "http", "sse":
+	default:
+		return axonv1alpha1.MCPServerSpec{}, fmt.Errorf("--mcp %q: unsupported type %q (must be stdio, http, or sse)", name, raw.Type)
+	}
+
+	return axonv1alpha1.MCPServerSpec{
+		Name:    name,
+		Type:    raw.Type,
+		Command: raw.Command,
+		Args:    raw.Args,
+		URL:     raw.URL,
+		Headers: raw.Headers,
+		Env:     raw.Env,
+	}, nil
 }

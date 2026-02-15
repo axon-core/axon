@@ -17,6 +17,12 @@ type AgentConfigSpec struct {
 	// Only applicable to claude-code type agents; other agents ignore this.
 	// +optional
 	Plugins []PluginSpec `json:"plugins,omitempty"`
+
+	// MCPServers defines MCP (Model Context Protocol) servers to make
+	// available to the agent. Each entry is written to the agent's native
+	// MCP configuration (e.g., ~/.claude.json for Claude Code).
+	// +optional
+	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
 // PluginSpec defines a Claude Code plugin bundle.
@@ -49,6 +55,43 @@ type AgentDefinition struct {
 	// +kubebuilder:validation:MinLength=1
 	Name    string `json:"name"`
 	Content string `json:"content"`
+}
+
+// MCPServerSpec defines an MCP server configuration.
+type MCPServerSpec struct {
+	// Name identifies this MCP server. Used as the key in the
+	// agent's MCP configuration.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Type is the transport type: "stdio", "http", or "sse".
+	// +kubebuilder:validation:Enum=stdio;http;sse
+	Type string `json:"type"`
+
+	// Command is the executable to run for stdio transport.
+	// Required when type is "stdio".
+	// +optional
+	Command string `json:"command,omitempty"`
+
+	// Args are command-line arguments for the server process.
+	// Only used when type is "stdio".
+	// +optional
+	Args []string `json:"args,omitempty"`
+
+	// URL is the server endpoint for http or sse transport.
+	// Required when type is "http" or "sse".
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// Headers are HTTP headers to include in requests.
+	// Only used when type is "http" or "sse".
+	// +optional
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Env are environment variables for the server process.
+	// Only used when type is "stdio".
+	// +optional
+	Env map[string]string `json:"env,omitempty"`
 }
 
 // AgentConfigReference refers to an AgentConfig resource by name.
