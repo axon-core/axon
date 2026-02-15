@@ -88,9 +88,7 @@ jobs:
 
       - name: Deploy controller
         run: |
-          bin/axon install
-          kubectl set image deployment/axon-controller-manager manager=gjkim42/axon-controller:e2e -n axon-system
-          kubectl patch deployment axon-controller-manager -n axon-system -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","imagePullPolicy":"Never","args":["--leader-elect","--spawner-image=gjkim42/axon-spawner:e2e","--spawner-image-pull-policy=Never","--claude-code-image=gjkim42/claude-code:e2e","--claude-code-image-pull-policy=Never","--codex-image=gjkim42/codex:e2e","--codex-image-pull-policy=Never","--gemini-image=gjkim42/gemini:e2e","--gemini-image-pull-policy=Never","--opencode-image=gjkim42/opencode:e2e","--opencode-image-pull-policy=Never"]}]}}}}'
+          bin/axon install --version e2e --image-pull-policy Never
           kubectl wait --for=condition=available deployment/axon-controller-manager -n axon-system --timeout=120s
 
       - name: E2E Test

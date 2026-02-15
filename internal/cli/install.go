@@ -29,13 +29,21 @@ const fieldManager = "axon"
 
 func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	var dryRun bool
+	var flagVersion string
+	var imagePullPolicy string
 
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install axon CRDs and controller into the cluster",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			controllerManifest := versionedManifest(manifests.InstallController)
+			if flagVersion != "" {
+				version.Version = flagVersion
+			}
+			controllerManifest := versionedManifest(manifests.InstallController, version.Version)
+			if imagePullPolicy != "" {
+				controllerManifest = withImagePullPolicy(controllerManifest, imagePullPolicy)
+			}
 
 			if dryRun {
 				if _, err := os.Stdout.Write(manifests.InstallCRD); err != nil {
@@ -78,18 +86,51 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the manifests that would be applied without installing")
+	cmd.Flags().StringVar(&flagVersion, "version", "", "override the version used for image tags (defaults to the binary version)")
+	cmd.Flags().StringVar(&imagePullPolicy, "image-pull-policy", "", "set imagePullPolicy on controller containers (e.g. Always, IfNotPresent, Never)")
 
 	return cmd
 }
 
-// versionedManifest replaces ":latest" image tags with the current version
-// tag in the controller manifest. When the version is "latest" (development
+// versionedManifest replaces ":latest" image tags with the given version
+// tag in the controller manifest. When ver is "latest" (development
 // builds), the manifest is returned as-is.
-func versionedManifest(data []byte) []byte {
-	if version.Version == "latest" {
+func versionedManifest(data []byte, ver string) []byte {
+	if ver == "latest" {
 		return data
 	}
-	return bytes.ReplaceAll(data, []byte(":latest"), []byte(":"+version.Version))
+	return bytes.ReplaceAll(data, []byte(":latest"), []byte(":"+ver))
+}
+
+// withImagePullPolicy inserts an imagePullPolicy field after each "image:"
+// line and a corresponding --*-image-pull-policy arg after each --*-image=
+// arg in the manifest YAML, preserving the original indentation.
+func withImagePullPolicy(data []byte, policy string) []byte {
+	var buf bytes.Buffer
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		buf.Write(line)
+		buf.WriteByte('\n')
+		trimmed := bytes.TrimLeft(line, " ")
+		indent := line[:len(line)-len(trimmed)]
+		if bytes.HasPrefix(trimmed, []byte("image:")) {
+			buf.Write(indent)
+			buf.WriteString("imagePullPolicy: ")
+			buf.WriteString(policy)
+			buf.WriteByte('\n')
+		} else if bytes.HasPrefix(trimmed, []byte("- --")) && bytes.Contains(trimmed, []byte("-image=")) {
+			eqIdx := bytes.IndexByte(trimmed, '=')
+			flagName := string(trimmed[2:eqIdx])
+			buf.Write(indent)
+			buf.WriteString("- ")
+			buf.WriteString(flagName)
+			buf.WriteString("-pull-policy=")
+			buf.WriteString(policy)
+			buf.WriteByte('\n')
+		}
+	}
+	return buf.Bytes()
 }
 
 func newUninstallCommand(cfg *ClientConfig) *cobra.Command {

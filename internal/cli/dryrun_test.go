@@ -8,6 +8,33 @@ import (
 	"testing"
 )
 
+// captureStdout redirects os.Stdout to a pipe, executes fn, and returns
+// everything written to stdout. Reading happens in a goroutine to avoid
+// pipe buffer deadlocks when the output is large.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating pipe: %v", err)
+	}
+	os.Stdout = w
+
+	var out bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		out.ReadFrom(r)
+		close(done)
+	}()
+
+	fn()
+
+	w.Close()
+	os.Stdout = old
+	<-done
+	return out.String()
+}
+
 func TestRunCommand_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -547,29 +574,11 @@ func TestInstallCommand_DryRun(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"install", "--dry-run"})
 
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Read from the pipe concurrently to avoid deadlock when output
-	// exceeds the OS pipe buffer size (~64KB).
-	var out bytes.Buffer
-	done := make(chan struct{})
-	go func() {
-		out.ReadFrom(r)
-		close(done)
-	}()
-
-	if err := cmd.Execute(); err != nil {
-		w.Close()
-		os.Stdout = old
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	w.Close()
-	os.Stdout = old
-	<-done
-	output := out.String()
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 
 	if !strings.Contains(output, "CustomResourceDefinition") {
 		t.Errorf("expected CRD manifest in dry-run output, got:\n%s", output[:min(len(output), 500)])
@@ -586,5 +595,41 @@ func TestInstallCommand_DryRun(t *testing.T) {
 	// Should not contain installation messages.
 	if strings.Contains(output, "Installing axon") {
 		t.Errorf("dry-run should not print installation messages, got:\n%s", output[:min(len(output), 500)])
+	}
+}
+
+func TestInstallCommand_DryRun_Version(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--version", "v0.5.0"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if strings.Contains(output, ":latest") {
+		t.Errorf("expected all :latest tags to be replaced, got:\n%s", output[:min(len(output), 500)])
+	}
+	if !strings.Contains(output, ":v0.5.0") {
+		t.Errorf("expected :v0.5.0 tags in dry-run output, got:\n%s", output[:min(len(output), 500)])
+	}
+}
+
+func TestInstallCommand_DryRun_ImagePullPolicy(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--image-pull-policy", "Always"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "imagePullPolicy: Always") {
+		t.Errorf("expected imagePullPolicy: Always in dry-run output, got:\n%s", output[:min(len(output), 500)])
+	}
+	if !strings.Contains(output, "--spawner-image-pull-policy=Always") {
+		t.Errorf("expected --spawner-image-pull-policy=Always in dry-run output, got:\n%s", output[:min(len(output), 500)])
 	}
 }
