@@ -97,6 +97,10 @@ type TaskTemplate struct {
 	// +optional
 	DependsOn []string `json:"dependsOn,omitempty"`
 
+	// Branch is the git branch spawned Tasks should work on.
+	// +optional
+	Branch string `json:"branch,omitempty"`
+
 	// PromptTemplate is a Go text/template for rendering the task prompt.
 	// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
 	// +optional

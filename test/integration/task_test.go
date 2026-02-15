@@ -1938,6 +1938,347 @@ var _ = Describe("Task Controller", func() {
 		})
 	})
 
+	Context("When creating Tasks with same branch", func() {
+		It("Should prevent concurrent execution on the same branch", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-branch-lock",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating Task A with branch feature-1")
+			taskA := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "branch-task-a",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Task A",
+					Branch: "feature-1",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "anthropic-api-key"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskA)).Should(Succeed())
+
+			By("Waiting for Task A Job to be created and simulating Running")
+			jobAKey := types.NamespacedName{Name: "branch-task-a", Namespace: ns.Name}
+			var jobA batchv1.Job
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, jobAKey, &jobA) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, jobAKey, &jobA); err != nil {
+					return err
+				}
+				jobA.Status.Active = 1
+				return k8sClient.Status().Update(ctx, &jobA)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying Task A is Running")
+			taskAKey := types.NamespacedName{Name: "branch-task-a", Namespace: ns.Name}
+			Eventually(func() axonv1alpha1.TaskPhase {
+				var t axonv1alpha1.Task
+				if err := k8sClient.Get(ctx, taskAKey, &t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskPhaseRunning))
+
+			By("Creating Task B with the same branch")
+			taskB := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "branch-task-b",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Task B",
+					Branch: "feature-1",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "anthropic-api-key"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskB)).Should(Succeed())
+
+			By("Verifying Task B enters Waiting phase")
+			taskBKey := types.NamespacedName{Name: "branch-task-b", Namespace: ns.Name}
+			Eventually(func() axonv1alpha1.TaskPhase {
+				var t axonv1alpha1.Task
+				if err := k8sClient.Get(ctx, taskBKey, &t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskPhaseWaiting))
+
+			By("Verifying Task B message mentions branch lock")
+			var taskBWaiting axonv1alpha1.Task
+			Expect(k8sClient.Get(ctx, taskBKey, &taskBWaiting)).Should(Succeed())
+			Expect(taskBWaiting.Status.Message).To(ContainSubstring("feature-1"))
+
+			By("Simulating Task A completion")
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, jobAKey, &jobA); err != nil {
+					return err
+				}
+				jobA.Status.Active = 0
+				jobA.Status.Succeeded = 1
+				return k8sClient.Status().Update(ctx, &jobA)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying Task B Job is eventually created")
+			jobBKey := types.NamespacedName{Name: "branch-task-b", Namespace: ns.Name}
+			Eventually(func() bool {
+				var job batchv1.Job
+				return k8sClient.Get(ctx, jobBKey, &job) == nil
+			}, 2*timeout, interval).Should(BeTrue())
+		})
+	})
+
+	Context("When creating a Task with branch and workspace", func() {
+		It("Should create a Job with branch-setup init container", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-branch-init",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating a Workspace resource")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/example/repo.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a Task with branch and workspace")
+			task := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "branch-init-task",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Work on branch",
+					Branch: "feature-x",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "anthropic-api-key"},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+						Name: "test-workspace",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, task)).Should(Succeed())
+
+			By("Verifying a Job is created")
+			jobKey := types.NamespacedName{Name: task.Name, Namespace: ns.Name}
+			createdJob := &batchv1.Job{}
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, jobKey, createdJob) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Logging the Job spec")
+			logJobSpec(createdJob)
+
+			By("Verifying the Job has branch-setup init container")
+			initContainers := createdJob.Spec.Template.Spec.InitContainers
+			Expect(len(initContainers)).To(BeNumerically(">=", 2))
+
+			var branchSetup *corev1.Container
+			for i := range initContainers {
+				if initContainers[i].Name == "branch-setup" {
+					branchSetup = &initContainers[i]
+					break
+				}
+			}
+			Expect(branchSetup).NotTo(BeNil(), "Expected branch-setup init container")
+			Expect(branchSetup.Command).To(Equal([]string{"sh", "-c", branchSetup.Command[2]}))
+			Expect(branchSetup.Command[2]).To(ContainSubstring("$AXON_BRANCH"))
+			Expect(branchSetup.Command[2]).To(ContainSubstring("git checkout"))
+
+			By("Verifying AXON_BRANCH env var is set on branch-setup init container")
+			var branchSetupEnvFound bool
+			for _, env := range branchSetup.Env {
+				if env.Name == "AXON_BRANCH" {
+					branchSetupEnvFound = true
+					Expect(env.Value).To(Equal("feature-x"))
+				}
+			}
+			Expect(branchSetupEnvFound).To(BeTrue(), "Expected AXON_BRANCH env var on branch-setup")
+
+			By("Verifying AXON_BRANCH env var is set on main container")
+			mainContainer := createdJob.Spec.Template.Spec.Containers[0]
+			var axonBranchFound bool
+			for _, env := range mainContainer.Env {
+				if env.Name == "AXON_BRANCH" {
+					axonBranchFound = true
+					Expect(env.Value).To(Equal("feature-x"))
+				}
+			}
+			Expect(axonBranchFound).To(BeTrue(), "Expected AXON_BRANCH env var")
+		})
+	})
+
+	Context("When creating Tasks with same branch but different workspaces", func() {
+		It("Should not block each other", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-task-branch-diff-ws",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Secret with API key")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anthropic-api-key",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-api-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			By("Creating two Workspace resources")
+			wsA := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workspace-a",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/org/repo-a.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, wsA)).Should(Succeed())
+
+			wsB := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "workspace-b",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/org/repo-b.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, wsB)).Should(Succeed())
+
+			By("Creating Task A on workspace-a with branch feature-1")
+			taskA := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "diff-ws-task-a",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Task A",
+					Branch: "feature-1",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "anthropic-api-key"},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{Name: "workspace-a"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskA)).Should(Succeed())
+
+			By("Waiting for Task A Job and simulating Running")
+			jobAKey := types.NamespacedName{Name: "diff-ws-task-a", Namespace: ns.Name}
+			var jobA batchv1.Job
+			Eventually(func() bool {
+				return k8sClient.Get(ctx, jobAKey, &jobA) == nil
+			}, timeout, interval).Should(BeTrue())
+
+			Eventually(func() error {
+				if err := k8sClient.Get(ctx, jobAKey, &jobA); err != nil {
+					return err
+				}
+				jobA.Status.Active = 1
+				return k8sClient.Status().Update(ctx, &jobA)
+			}, timeout, interval).Should(Succeed())
+
+			By("Verifying Task A is Running")
+			taskAKey := types.NamespacedName{Name: "diff-ws-task-a", Namespace: ns.Name}
+			Eventually(func() axonv1alpha1.TaskPhase {
+				var t axonv1alpha1.Task
+				if err := k8sClient.Get(ctx, taskAKey, &t); err != nil {
+					return ""
+				}
+				return t.Status.Phase
+			}, timeout, interval).Should(Equal(axonv1alpha1.TaskPhaseRunning))
+
+			By("Creating Task B on workspace-b with the same branch name")
+			taskB := &axonv1alpha1.Task{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "diff-ws-task-b",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpec{
+					Type:   "claude-code",
+					Prompt: "Task B",
+					Branch: "feature-1",
+					Credentials: axonv1alpha1.Credentials{
+						Type:      axonv1alpha1.CredentialTypeAPIKey,
+						SecretRef: axonv1alpha1.SecretReference{Name: "anthropic-api-key"},
+					},
+					WorkspaceRef: &axonv1alpha1.WorkspaceReference{Name: "workspace-b"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, taskB)).Should(Succeed())
+
+			By("Verifying Task B Job is created (not blocked by Task A)")
+			jobBKey := types.NamespacedName{Name: "diff-ws-task-b", Namespace: ns.Name}
+			Eventually(func() bool {
+				var job batchv1.Job
+				return k8sClient.Get(ctx, jobBKey, &job) == nil
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
 	Context("When creating Tasks with circular dependencies", func() {
 		It("Should fail with cycle detection message", func() {
 			By("Creating a namespace")

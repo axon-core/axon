@@ -41,11 +41,12 @@ const (
 // TaskReconciler reconciles a Task object.
 type TaskReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	JobBuilder  *JobBuilder
-	Clientset   kubernetes.Interface
-	TokenClient *githubapp.TokenClient
-	Recorder    record.EventRecorder
+	Scheme       *runtime.Scheme
+	JobBuilder   *JobBuilder
+	Clientset    kubernetes.Interface
+	TokenClient  *githubapp.TokenClient
+	Recorder     record.EventRecorder
+	BranchLocker *BranchLocker
 }
 
 // +kubebuilder:rbac:groups=axon.io,resources=tasks,verbs=get;list;watch;create;update;patch;delete
@@ -109,6 +110,30 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 		}
 
+		if task.Spec.Branch != "" {
+			if task.Spec.WorkspaceRef == nil {
+				logger.Info("Branch is set without workspaceRef, branch checkout will not happen", "task", task.Name, "branch", task.Spec.Branch)
+				r.recordEvent(&task, corev1.EventTypeWarning, "BranchWithoutWorkspace", "Branch %q is set but workspaceRef is not configured, branch checkout will be skipped", task.Spec.Branch)
+			}
+			lockKey := branchLockKey(&task)
+			acquired, holder := r.BranchLocker.TryAcquire(lockKey, task.Name)
+			if !acquired {
+				// In-memory lock is held by another task.
+				logger.Info("Branch locked by another task", "branch", task.Spec.Branch, "lockedBy", holder)
+				r.setWaitingPhase(ctx, &task, fmt.Sprintf("Waiting for branch %q (locked by %s)", task.Spec.Branch, holder))
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+			// Fallback: check status-based lock for restart recovery.
+			// After a restart the in-memory map is empty, so TryAcquire
+			// always succeeds. The status check catches Running/Pending
+			// tasks whose lock was lost.
+			locked, result, err := r.checkBranchLock(ctx, &task)
+			if err != nil || locked {
+				r.BranchLocker.Release(lockKey, task.Name)
+				return result, err
+			}
+		}
+
 		return r.createJob(ctx, &task)
 	}
 
@@ -145,6 +170,11 @@ func (r *TaskReconciler) handleDeletion(ctx context.Context, task *axonv1alpha1.
 	logger := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(task, taskFinalizer) {
+		// Release branch lock if held.
+		if task.Spec.Branch != "" {
+			r.BranchLocker.Release(branchLockKey(task), task.Name)
+		}
+
 		// Delete the Job if it exists
 		var job batchv1.Job
 		if err := r.Get(ctx, client.ObjectKey{Namespace: task.Namespace, Name: task.Name}, &job); err == nil {
@@ -463,6 +493,11 @@ func (r *TaskReconciler) updateStatus(ctx context.Context, task *axonv1alpha1.Ta
 		return ctrl.Result{}, err
 	}
 
+	// Release branch lock when task reaches a terminal phase.
+	if setCompletionTime && task.Spec.Branch != "" {
+		r.BranchLocker.Release(branchLockKey(task), task.Name)
+	}
+
 	// Record task duration when completion time is set and we have a start time
 	if setCompletionTime && task.Status.StartTime != nil {
 		duration := task.Status.CompletionTime.Time.Sub(task.Status.StartTime.Time).Seconds()
@@ -638,6 +673,54 @@ func (r *TaskReconciler) walkDeps(ctx context.Context, namespace, name string, v
 	return nil
 }
 
+// branchLockKey returns the key used for branch locking. The lock is scoped
+// to (workspace, branch) so that tasks on different workspaces with the same
+// branch name do not block each other.
+func branchLockKey(task *axonv1alpha1.Task) string {
+	ws := ""
+	if task.Spec.WorkspaceRef != nil {
+		ws = task.Spec.WorkspaceRef.Name
+	}
+	return ws + ":" + task.Spec.Branch
+}
+
+// checkBranchLock checks if another task with the same workspace and branch is
+// active. Returns (locked, result, error). locked=true means another task holds
+// the branch. A task is considered to hold the lock if it is Running, Pending,
+// or is an earlier-created Waiting task (FIFO ordering for the branch queue).
+func (r *TaskReconciler) checkBranchLock(ctx context.Context, task *axonv1alpha1.Task) (bool, ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	key := branchLockKey(task)
+
+	var taskList axonv1alpha1.TaskList
+	if err := r.List(ctx, &taskList, client.InNamespace(task.Namespace)); err != nil {
+		return false, ctrl.Result{}, err
+	}
+
+	for _, t := range taskList.Items {
+		if t.Name == task.Name {
+			continue
+		}
+		if t.Spec.Branch == "" || branchLockKey(&t) != key {
+			continue
+		}
+		switch t.Status.Phase {
+		case axonv1alpha1.TaskPhaseRunning, axonv1alpha1.TaskPhasePending:
+			logger.Info("Branch locked by another task", "branch", task.Spec.Branch, "lockedBy", t.Name)
+			r.setWaitingPhase(ctx, task, fmt.Sprintf("Waiting for branch %q (locked by %s)", task.Spec.Branch, t.Name))
+			return true, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		case axonv1alpha1.TaskPhaseWaiting:
+			if t.CreationTimestamp.Before(&task.CreationTimestamp) {
+				logger.Info("Branch queued behind earlier task", "branch", task.Spec.Branch, "queuedBehind", t.Name)
+				r.setWaitingPhase(ctx, task, fmt.Sprintf("Waiting for branch %q (queued behind %s)", task.Spec.Branch, t.Name))
+				return true, ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+		}
+	}
+
+	return false, ctrl.Result{}, nil
+}
+
 // setWaitingPhase updates the task phase to Waiting with the given message.
 func (r *TaskReconciler) setWaitingPhase(ctx context.Context, task *axonv1alpha1.Task, message string) {
 	logger := log.FromContext(ctx)
@@ -706,8 +789,9 @@ func (r *TaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // enqueueDependentTasks returns reconcile requests for tasks that depend on the
-// given task. This ensures dependent tasks are reconciled immediately when a
-// dependency reaches a terminal phase, instead of waiting for a requeue timer.
+// given task or are waiting for the same branch. This ensures dependent and
+// branch-queued tasks are reconciled immediately when a task reaches a terminal
+// phase, instead of waiting for a requeue timer.
 func (r *TaskReconciler) enqueueDependentTasks(ctx context.Context, obj client.Object) []reconcile.Request {
 	task, ok := obj.(*axonv1alpha1.Task)
 	if !ok {
@@ -724,15 +808,30 @@ func (r *TaskReconciler) enqueueDependentTasks(ctx context.Context, obj client.O
 		return nil
 	}
 
+	seen := make(map[string]bool)
 	var requests []reconcile.Request
 	for _, t := range taskList.Items {
+		if t.Name == task.Name || seen[t.Name] {
+			continue
+		}
+		// Re-enqueue tasks that depend on this task
 		for _, dep := range t.Spec.DependsOn {
 			if dep == task.Name {
+				seen[t.Name] = true
 				requests = append(requests, reconcile.Request{
 					NamespacedName: client.ObjectKeyFromObject(&t),
 				})
 				break
 			}
+		}
+		// Re-enqueue tasks waiting for the same workspace+branch
+		if !seen[t.Name] && task.Spec.Branch != "" && t.Spec.Branch != "" &&
+			branchLockKey(&t) == branchLockKey(task) &&
+			t.Status.Phase == axonv1alpha1.TaskPhaseWaiting {
+			seen[t.Name] = true
+			requests = append(requests, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&t),
+			})
 		}
 	}
 	return requests

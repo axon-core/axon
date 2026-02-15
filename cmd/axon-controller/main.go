@@ -98,12 +98,13 @@ func main() {
 	jobBuilder.OpenCodeImage = openCodeImage
 	jobBuilder.OpenCodeImagePullPolicy = corev1.PullPolicy(openCodeImagePullPolicy)
 	if err = (&controller.TaskReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		JobBuilder:  jobBuilder,
-		Clientset:   clientset,
-		TokenClient: githubapp.NewTokenClient(),
-		Recorder:    mgr.GetEventRecorderFor("axon-controller"),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		JobBuilder:   jobBuilder,
+		Clientset:    clientset,
+		TokenClient:  githubapp.NewTokenClient(),
+		Recorder:     mgr.GetEventRecorderFor("axon-controller"),
+		BranchLocker: controller.NewBranchLocker(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Task")
 		os.Exit(1)

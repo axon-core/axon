@@ -203,6 +203,9 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		if len(ts.Spec.TaskTemplate.DependsOn) > 0 {
 			task.Spec.DependsOn = ts.Spec.TaskTemplate.DependsOn
 		}
+		if ts.Spec.TaskTemplate.Branch != "" {
+			task.Spec.Branch = ts.Spec.TaskTemplate.Branch
+		}
 
 		if err := cl.Create(ctx, task); err != nil {
 			if apierrors.IsAlreadyExists(err) {

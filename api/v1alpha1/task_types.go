@@ -27,7 +27,7 @@ const (
 	TaskPhaseSucceeded TaskPhase = "Succeeded"
 	// TaskPhaseFailed means the Task has failed.
 	TaskPhaseFailed TaskPhase = "Failed"
-	// TaskPhaseWaiting means the Task is waiting for dependencies.
+	// TaskPhaseWaiting means the Task is waiting for dependencies or branch lock.
 	TaskPhaseWaiting TaskPhase = "Waiting"
 )
 
@@ -108,6 +108,12 @@ type TaskSpec struct {
 	// +optional
 	DependsOn []string `json:"dependsOn,omitempty"`
 
+	// Branch is the git branch this Task works on.
+	// The controller ensures only one Task with the same Branch value
+	// runs at a time. Overrides workspace ref for checkout.
+	// +optional
+	Branch string `json:"branch,omitempty"`
+
 	// TTLSecondsAfterFinished limits the lifetime of a Task that has finished
 	// execution (either Succeeded or Failed). If set, the Task will be
 	// automatically deleted after the given number of seconds once it reaches
@@ -165,6 +171,7 @@ type TaskStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Branch",type=string,JSONPath=`.spec.branch`,priority=1
 // +kubebuilder:printcolumn:name="Depends On",type=string,JSONPath=`.spec.dependsOn`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
