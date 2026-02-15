@@ -1338,4 +1338,80 @@ var _ = Describe("TaskSpawner Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
+
+	Context("When creating a TaskSpawner with branch template", func() {
+		It("Should store the branch template and create a Deployment", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-taskspawner-branch-tmpl",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a Workspace")
+			ws := &axonv1alpha1.Workspace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-workspace",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.WorkspaceSpec{
+					Repo: "https://github.com/axon-core/axon.git",
+					Ref:  "main",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ws)).Should(Succeed())
+
+			By("Creating a TaskSpawner with branch template")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "spawner-branch-tmpl",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					When: axonv1alpha1.When{
+						GitHubIssues: &axonv1alpha1.GitHubIssues{
+							State: "open",
+						},
+					},
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeOAuth,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "claude-credentials",
+							},
+						},
+						WorkspaceRef: &axonv1alpha1.WorkspaceReference{
+							Name: "test-workspace",
+						},
+						Branch: "axon-task-{{.Number}}",
+					},
+					PollInterval: "5m",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			By("Verifying the branch template is stored in the spec")
+			tsLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdTS := &axonv1alpha1.TaskSpawner{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, tsLookupKey, createdTS)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+			Expect(createdTS.Spec.TaskTemplate.Branch).To(Equal("axon-task-{{.Number}}"))
+
+			By("Verifying a Deployment is created")
+			deployLookupKey := types.NamespacedName{Name: ts.Name, Namespace: ns.Name}
+			createdDeploy := &appsv1.Deployment{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, deployLookupKey, createdDeploy)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
+
+			By("Verifying the Deployment has owner reference")
+			Expect(createdDeploy.OwnerReferences).To(HaveLen(1))
+			Expect(createdDeploy.OwnerReferences[0].Name).To(Equal(ts.Name))
+		})
+	})
 })

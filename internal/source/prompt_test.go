@@ -150,3 +150,39 @@ func TestRenderPromptInvalidTemplate(t *testing.T) {
 		t.Fatal("expected error for invalid template")
 	}
 }
+
+func TestRenderTemplate(t *testing.T) {
+	item := WorkItem{
+		ID:     "42",
+		Number: 42,
+		Title:  "Fix the login bug",
+		Kind:   "Issue",
+	}
+
+	result, err := RenderTemplate("axon-task-{{.Number}}", item)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "axon-task-42" {
+		t.Errorf("expected %q, got %q", "axon-task-42", result)
+	}
+}
+
+func TestRenderTemplateStaticString(t *testing.T) {
+	item := WorkItem{Number: 1}
+
+	result, err := RenderTemplate("my-branch", item)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "my-branch" {
+		t.Errorf("expected %q, got %q", "my-branch", result)
+	}
+}
+
+func TestRenderTemplateInvalid(t *testing.T) {
+	_, err := RenderTemplate("{{.Bad", WorkItem{})
+	if err == nil {
+		t.Fatal("expected error for invalid template")
+	}
+}
