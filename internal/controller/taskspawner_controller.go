@@ -130,25 +130,47 @@ func (r *TaskSpawnerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	// Determine desired replica count based on suspend state
+	isSuspended := ts.Spec.Suspend != nil && *ts.Spec.Suspend
+	desiredReplicas := int32(1)
+	if isSuspended {
+		desiredReplicas = 0
+	}
+
 	// Create Deployment if it doesn't exist
 	if !deployExists {
-		return r.createDeployment(ctx, &ts, workspace, isGitHubApp)
+		return r.createDeployment(ctx, &ts, workspace, isGitHubApp, desiredReplicas)
 	}
 
 	// Update Deployment if spec changed
-	if err := r.updateDeployment(ctx, &ts, &deploy, workspace, isGitHubApp); err != nil {
+	if err := r.updateDeployment(ctx, &ts, &deploy, workspace, isGitHubApp, desiredReplicas); err != nil {
 		logger.Error(err, "unable to update Deployment")
 		return ctrl.Result{}, err
 	}
 
-	// Update status with deployment name if not set
-	if ts.Status.DeploymentName != deploy.Name {
+	// Determine the desired phase based on current state
+	desiredPhase := ts.Status.Phase
+	if isSuspended && ts.Status.Phase != axonv1alpha1.TaskSpawnerPhaseSuspended {
+		desiredPhase = axonv1alpha1.TaskSpawnerPhaseSuspended
+	} else if !isSuspended && ts.Status.Phase == axonv1alpha1.TaskSpawnerPhaseSuspended {
+		desiredPhase = axonv1alpha1.TaskSpawnerPhaseRunning
+	}
+
+	// Update status with deployment name or phase if needed
+	needsStatusUpdate := ts.Status.DeploymentName != deploy.Name || ts.Status.Phase != desiredPhase
+	if needsStatusUpdate {
 		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			if getErr := r.Get(ctx, req.NamespacedName, &ts); getErr != nil {
 				return getErr
 			}
 			ts.Status.DeploymentName = deploy.Name
-			if ts.Status.Phase == "" {
+			if isSuspended {
+				ts.Status.Phase = axonv1alpha1.TaskSpawnerPhaseSuspended
+				ts.Status.Message = "Suspended by user"
+			} else if ts.Status.Phase == axonv1alpha1.TaskSpawnerPhaseSuspended {
+				ts.Status.Phase = axonv1alpha1.TaskSpawnerPhaseRunning
+				ts.Status.Message = "Resumed"
+			} else if ts.Status.Phase == "" {
 				ts.Status.Phase = axonv1alpha1.TaskSpawnerPhasePending
 			}
 			return r.Status().Update(ctx, &ts)
@@ -179,10 +201,11 @@ func (r *TaskSpawnerReconciler) handleDeletion(ctx context.Context, ts *axonv1al
 }
 
 // createDeployment creates a Deployment for the TaskSpawner.
-func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, workspace *axonv1alpha1.WorkspaceSpec, isGitHubApp bool) (ctrl.Result, error) {
+func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, workspace *axonv1alpha1.WorkspaceSpec, isGitHubApp bool, replicas int32) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	deploy := r.DeploymentBuilder.Build(ts, workspace, isGitHubApp)
+	deploy.Spec.Replicas = &replicas
 
 	// Set owner reference
 	if err := controllerutil.SetControllerReference(ts, deploy, r.Scheme); err != nil {
@@ -206,7 +229,12 @@ func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1
 		if getErr := r.Get(ctx, client.ObjectKeyFromObject(ts), ts); getErr != nil {
 			return getErr
 		}
-		ts.Status.Phase = axonv1alpha1.TaskSpawnerPhasePending
+		if replicas == 0 {
+			ts.Status.Phase = axonv1alpha1.TaskSpawnerPhaseSuspended
+			ts.Status.Message = "Suspended by user"
+		} else {
+			ts.Status.Phase = axonv1alpha1.TaskSpawnerPhasePending
+		}
 		ts.Status.DeploymentName = deploy.Name
 		return r.Status().Update(ctx, ts)
 	}); err != nil {
@@ -218,35 +246,42 @@ func (r *TaskSpawnerReconciler) createDeployment(ctx context.Context, ts *axonv1
 }
 
 // updateDeployment updates the Deployment to match the desired spec if it has drifted.
-func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, deploy *appsv1.Deployment, workspace *axonv1alpha1.WorkspaceSpec, isGitHubApp bool) error {
+func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *axonv1alpha1.TaskSpawner, deploy *appsv1.Deployment, workspace *axonv1alpha1.WorkspaceSpec, isGitHubApp bool, desiredReplicas int32) error {
 	logger := log.FromContext(ctx)
 
 	desired := r.DeploymentBuilder.Build(ts, workspace, isGitHubApp)
 
 	// Compare container spec (image, args, env)
-	if len(deploy.Spec.Template.Spec.Containers) == 0 {
-		return nil
-	}
-	current := deploy.Spec.Template.Spec.Containers[0]
-	target := desired.Spec.Template.Spec.Containers[0]
+	needsUpdate := false
+	if len(deploy.Spec.Template.Spec.Containers) > 0 {
+		current := deploy.Spec.Template.Spec.Containers[0]
+		target := desired.Spec.Template.Spec.Containers[0]
 
-	needsUpdate := current.Image != target.Image ||
-		!equalStringSlices(current.Args, target.Args) ||
-		!equalEnvVars(current.Env, target.Env)
+		if current.Image != target.Image ||
+			!equalStringSlices(current.Args, target.Args) ||
+			!equalEnvVars(current.Env, target.Env) {
+			deploy.Spec.Template.Spec.Containers[0].Image = target.Image
+			deploy.Spec.Template.Spec.Containers[0].Args = target.Args
+			deploy.Spec.Template.Spec.Containers[0].Env = target.Env
+			needsUpdate = true
+		}
+	}
+
+	// Check replica count for suspend/resume
+	if deploy.Spec.Replicas == nil || *deploy.Spec.Replicas != desiredReplicas {
+		deploy.Spec.Replicas = &desiredReplicas
+		needsUpdate = true
+	}
 
 	if !needsUpdate {
 		return nil
 	}
 
-	deploy.Spec.Template.Spec.Containers[0].Image = target.Image
-	deploy.Spec.Template.Spec.Containers[0].Args = target.Args
-	deploy.Spec.Template.Spec.Containers[0].Env = target.Env
-
 	if err := r.Update(ctx, deploy); err != nil {
 		return err
 	}
 
-	logger.Info("updated Deployment", "deployment", deploy.Name)
+	logger.Info("Updated Deployment", "deployment", deploy.Name, "replicas", desiredReplicas)
 	r.recordEvent(ts, corev1.EventTypeNormal, "DeploymentUpdated", "Updated spawner Deployment %s", deploy.Name)
 	return nil
 }

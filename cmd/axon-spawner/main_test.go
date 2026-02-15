@@ -36,6 +36,7 @@ func newTestScheme() *runtime.Scheme {
 }
 
 func int32Ptr(v int32) *int32 { return &v }
+func boolPtr(v bool) *bool    { return &v }
 
 func setupTest(t *testing.T, ts *axonv1alpha1.TaskSpawner, existingTasks ...axonv1alpha1.Task) (client.Client, types.NamespacedName) {
 	t.Helper()
@@ -425,5 +426,319 @@ func TestRunCycleWithSource_PodOverridesForwarded(t *testing.T) {
 	}
 	if task.Spec.PodOverrides.NodeSelector["pool"] != "agents" {
 		t.Errorf("Expected nodeSelector pool=agents, got %v", task.Spec.PodOverrides.NodeSelector)
+	}
+}
+
+func TestRunCycleWithSource_Suspended(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.Suspend = boolPtr(true)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// No tasks should be created when suspended
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 0 {
+		t.Errorf("Expected 0 tasks when suspended, got %d", len(taskList.Items))
+	}
+
+	// Status should be Suspended
+	var updatedTS axonv1alpha1.TaskSpawner
+	if err := cl.Get(context.Background(), key, &updatedTS); err != nil {
+		t.Fatalf("Getting TaskSpawner: %v", err)
+	}
+	if updatedTS.Status.Phase != axonv1alpha1.TaskSpawnerPhaseSuspended {
+		t.Errorf("Expected phase %q, got %q", axonv1alpha1.TaskSpawnerPhaseSuspended, updatedTS.Status.Phase)
+	}
+	if updatedTS.Status.Message != "Suspended by user" {
+		t.Errorf("Expected message %q, got %q", "Suspended by user", updatedTS.Status.Message)
+	}
+}
+
+func TestRunCycleWithSource_SuspendFalseRunsNormally(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.Suspend = boolPtr(false)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Tasks should be created normally when suspend=false
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Errorf("Expected 2 tasks when suspend=false, got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_SuspendedIdempotent(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.Suspend = boolPtr(true)
+	// Pre-set the status to Suspended to test idempotency
+	ts.Status.Phase = axonv1alpha1.TaskSpawnerPhaseSuspended
+	ts.Status.Message = "Suspended by user"
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+		},
+	}
+
+	// Run twice - should not error on the second run
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("First cycle error: %v", err)
+	}
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Second cycle error: %v", err)
+	}
+
+	// Still no tasks created
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 0 {
+		t.Errorf("Expected 0 tasks when suspended, got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_MaxTotalTasksLimitsCreation(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.MaxTotalTasks = int32Ptr(2)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+			{ID: "3", Title: "Item 3"},
+			{ID: "4", Title: "Item 4"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Only 2 tasks should be created (maxTotalTasks=2)
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Errorf("Expected 2 tasks (maxTotalTasks=2), got %d", len(taskList.Items))
+	}
+
+	// Check TaskBudgetExhausted condition
+	var updatedTS axonv1alpha1.TaskSpawner
+	if err := cl.Get(context.Background(), key, &updatedTS); err != nil {
+		t.Fatalf("Getting TaskSpawner: %v", err)
+	}
+	foundCondition := false
+	for _, c := range updatedTS.Status.Conditions {
+		if c.Type == "TaskBudgetExhausted" && c.Status == metav1.ConditionTrue {
+			foundCondition = true
+			break
+		}
+	}
+	if !foundCondition {
+		t.Error("Expected TaskBudgetExhausted condition to be True")
+	}
+}
+
+func TestRunCycleWithSource_MaxTotalTasksWithExistingTasks(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.MaxTotalTasks = int32Ptr(3)
+	ts.Status.TotalTasksCreated = 2 // Already created 2 tasks before
+	existingTasks := []axonv1alpha1.Task{
+		newTask("spawner-existing1", "default", "spawner", axonv1alpha1.TaskPhaseSucceeded),
+		newTask("spawner-existing2", "default", "spawner", axonv1alpha1.TaskPhaseRunning),
+	}
+	cl, key := setupTest(t, ts, existingTasks...)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "existing1", Title: "Existing 1"},
+			{ID: "existing2", Title: "Existing 2"},
+			{ID: "3", Title: "Item 3"},
+			{ID: "4", Title: "Item 4"},
+			{ID: "5", Title: "Item 5"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Only 1 new task should be created (totalCreated=2, max=3, budget left=1)
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 3 {
+		t.Errorf("Expected 3 tasks (2 existing + 1 new), got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_MaxTotalTasksBudgetAlreadyExhausted(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.MaxTotalTasks = int32Ptr(5)
+	ts.Status.TotalTasksCreated = 5 // Budget already used
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// No new tasks should be created
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 0 {
+		t.Errorf("Expected 0 tasks (budget exhausted), got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_MaxTotalTasksZeroMeansNoLimit(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.MaxTotalTasks = int32Ptr(0)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+			{ID: "3", Title: "Item 3"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 3 {
+		t.Errorf("Expected 3 tasks (no limit with maxTotalTasks=0), got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_MaxTotalTasksAndMaxConcurrencyCombined(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", int32Ptr(10))
+	ts.Spec.MaxTotalTasks = int32Ptr(2)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+			{ID: "2", Title: "Item 2"},
+			{ID: "3", Title: "Item 3"},
+			{ID: "4", Title: "Item 4"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// maxTotalTasks=2 is more restrictive than maxConcurrency=10
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Errorf("Expected 2 tasks (maxTotalTasks=2 more restrictive), got %d", len(taskList.Items))
+	}
+}
+
+func TestRunCycleWithSource_SuspendedConditionSet(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.Suspend = boolPtr(true)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var updatedTS axonv1alpha1.TaskSpawner
+	if err := cl.Get(context.Background(), key, &updatedTS); err != nil {
+		t.Fatalf("Getting TaskSpawner: %v", err)
+	}
+
+	foundSuspended := false
+	for _, c := range updatedTS.Status.Conditions {
+		if c.Type == "Suspended" && c.Status == metav1.ConditionTrue {
+			foundSuspended = true
+			break
+		}
+	}
+	if !foundSuspended {
+		t.Error("Expected Suspended condition to be True")
+	}
+}
+
+func TestRunCycleWithSource_NotSuspendedConditionCleared(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.Suspend = boolPtr(false)
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var updatedTS axonv1alpha1.TaskSpawner
+	if err := cl.Get(context.Background(), key, &updatedTS); err != nil {
+		t.Fatalf("Getting TaskSpawner: %v", err)
+	}
+
+	for _, c := range updatedTS.Status.Conditions {
+		if c.Type == "Suspended" && c.Status == metav1.ConditionTrue {
+			t.Error("Expected Suspended condition to be False when not suspended")
+		}
 	}
 }

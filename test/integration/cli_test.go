@@ -520,3 +520,276 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 		})
 	})
 })
+
+var _ = Describe("CLI Suspend/Resume Commands", func() {
+	Context("When suspending a TaskSpawner via CLI", func() {
+		It("Should set suspend=true on the TaskSpawner", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-suspend-ts",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cli-suspend-spawner",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Suspending the TaskSpawner via CLI")
+			err := runCLI(kubeconfigPath, ns.Name, "suspend", "taskspawner", "cli-suspend-spawner")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the TaskSpawner has suspend=true")
+			updatedTS := &axonv1alpha1.TaskSpawner{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cli-suspend-spawner", Namespace: ns.Name}, updatedTS)).To(Succeed())
+			Expect(updatedTS.Spec.Suspend).NotTo(BeNil())
+			Expect(*updatedTS.Spec.Suspend).To(BeTrue())
+		})
+	})
+
+	Context("When suspending an already suspended TaskSpawner via CLI", func() {
+		It("Should be idempotent and not error", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-suspend-idem",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner already suspended")
+			suspend := true
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cli-suspend-idem",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					Suspend: &suspend,
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Suspending again via CLI (should be idempotent)")
+			err := runCLI(kubeconfigPath, ns.Name, "suspend", "taskspawner", "cli-suspend-idem")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the TaskSpawner is still suspended")
+			updatedTS := &axonv1alpha1.TaskSpawner{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cli-suspend-idem", Namespace: ns.Name}, updatedTS)).To(Succeed())
+			Expect(updatedTS.Spec.Suspend).NotTo(BeNil())
+			Expect(*updatedTS.Spec.Suspend).To(BeTrue())
+		})
+	})
+
+	Context("When resuming a suspended TaskSpawner via CLI", func() {
+		It("Should set suspend=false on the TaskSpawner", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-resume-ts",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a suspended TaskSpawner")
+			suspend := true
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cli-resume-spawner",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					Suspend: &suspend,
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Resuming the TaskSpawner via CLI")
+			err := runCLI(kubeconfigPath, ns.Name, "resume", "taskspawner", "cli-resume-spawner")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the TaskSpawner has suspend=false")
+			updatedTS := &axonv1alpha1.TaskSpawner{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "cli-resume-spawner", Namespace: ns.Name}, updatedTS)).To(Succeed())
+			Expect(updatedTS.Spec.Suspend).NotTo(BeNil())
+			Expect(*updatedTS.Spec.Suspend).To(BeFalse())
+		})
+	})
+
+	Context("When resuming a non-suspended TaskSpawner via CLI", func() {
+		It("Should be idempotent and not error", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-resume-idem",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner (not suspended)")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cli-resume-idem",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Resuming via CLI (should be idempotent)")
+			err := runCLI(kubeconfigPath, ns.Name, "resume", "taskspawner", "cli-resume-idem")
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("When using 'ts' alias for suspend/resume", func() {
+		It("Should support 'ts' alias for suspend and resume", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-suspend-alias",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "alias-suspend",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Suspending using 'ts' alias")
+			err := runCLI(kubeconfigPath, ns.Name, "suspend", "ts", "alias-suspend")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the TaskSpawner is suspended")
+			updatedTS := &axonv1alpha1.TaskSpawner{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "alias-suspend", Namespace: ns.Name}, updatedTS)).To(Succeed())
+			Expect(updatedTS.Spec.Suspend).NotTo(BeNil())
+			Expect(*updatedTS.Spec.Suspend).To(BeTrue())
+
+			By("Resuming using 'ts' alias")
+			err = runCLI(kubeconfigPath, ns.Name, "resume", "ts", "alias-suspend")
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the TaskSpawner is resumed")
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "alias-suspend", Namespace: ns.Name}, updatedTS)).To(Succeed())
+			Expect(updatedTS.Spec.Suspend).NotTo(BeNil())
+			Expect(*updatedTS.Spec.Suspend).To(BeFalse())
+		})
+	})
+
+	Context("When completing suspend/resume taskspawner names", func() {
+		It("Should return TaskSpawner names for suspend command", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-complete-suspend-ts",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating a TaskSpawner")
+			ts := &axonv1alpha1.TaskSpawner{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "spawner-suspend-comp",
+					Namespace: ns.Name,
+				},
+				Spec: axonv1alpha1.TaskSpawnerSpec{
+					TaskTemplate: axonv1alpha1.TaskTemplate{
+						Type: "claude-code",
+						Credentials: axonv1alpha1.Credentials{
+							Type: axonv1alpha1.CredentialTypeAPIKey,
+							SecretRef: axonv1alpha1.SecretReference{
+								Name: "test-secret",
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ts)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Verifying shell completion for suspend command")
+			output := runComplete(kubeconfigPath, ns.Name, "suspend", "taskspawner", "")
+			Expect(output).To(ContainSubstring("spawner-suspend-comp"))
+			Expect(output).To(ContainSubstring(":4"))
+
+			By("Verifying shell completion for resume command")
+			output = runComplete(kubeconfigPath, ns.Name, "resume", "taskspawner", "")
+			Expect(output).To(ContainSubstring("spawner-suspend-comp"))
+			Expect(output).To(ContainSubstring(":4"))
+		})
+	})
+})

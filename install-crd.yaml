@@ -543,6 +543,9 @@ spec:
     - jsonPath: .spec.taskTemplate.workspaceRef.name
       name: Workspace
       type: string
+    - jsonPath: .spec.suspend
+      name: Suspend
+      type: boolean
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -591,11 +594,29 @@ spec:
                 format: int32
                 minimum: 0
                 type: integer
+              maxTotalTasks:
+                description: |-
+                  MaxTotalTasks limits the total number of Tasks this spawner will create
+                  over its lifetime. Once reached, the spawner stops creating new Tasks
+                  (but continues polling to update status). If unset or zero, there is
+                  no limit. This counter persists across spawner restarts via
+                  status.totalTasksCreated.
+                format: int32
+                minimum: 0
+                type: integer
               pollInterval:
                 default: 5m
                 description: PollInterval is how often to poll the source for new
                   items (e.g., "5m"). Defaults to "5m".
                 type: string
+              suspend:
+                default: false
+                description: |-
+                  Suspend tells the spawner to stop polling and creating tasks.
+                  Existing running Tasks are not affected (they continue to completion).
+                  When set back to false, the spawner resumes from where it left off.
+                  Defaults to false.
+                type: boolean
               taskTemplate:
                 description: TaskTemplate defines the template for spawned Tasks.
                 properties:
@@ -991,6 +1012,66 @@ spec:
                 description: ActiveTasks is the number of currently active (non-terminal)
                   Tasks.
                 type: integer
+              conditions:
+                description: Conditions provides detailed status information.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               deploymentName:
                 description: DeploymentName is the name of the Deployment running
                   the spawner.
