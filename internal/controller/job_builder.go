@@ -155,6 +155,13 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 		})
 	}
 
+	if task.Spec.Branch != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "AXON_BRANCH",
+			Value: task.Spec.Branch,
+		})
+	}
+
 	switch task.Spec.Credentials.Type {
 	case axonv1alpha1.CredentialTypeAPIKey:
 		keyName := apiKeyEnvVar(task.Spec.Type)
@@ -289,6 +296,38 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 		}
 
 		initContainers = append(initContainers, initContainer)
+
+		if task.Spec.Branch != "" {
+			fetchCmd := `git fetch origin "$AXON_BRANCH":"$AXON_BRANCH" 2>/dev/null`
+			if workspace.SecretRef != nil {
+				credHelper := `!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f`
+				fetchCmd = fmt.Sprintf(`git -c credential.helper='%s' fetch origin "$AXON_BRANCH":"$AXON_BRANCH" 2>/dev/null`, credHelper)
+			}
+			branchSetupScript := fmt.Sprintf(
+				`cd %s/repo && %s; `+
+					`if git rev-parse --verify refs/heads/"$AXON_BRANCH" >/dev/null 2>&1; then `+
+					`git checkout "$AXON_BRANCH"; `+
+					`else git checkout -b "$AXON_BRANCH"; fi`,
+				WorkspaceMountPath, fetchCmd,
+			)
+			branchEnv := make([]corev1.EnvVar, len(workspaceEnvVars), len(workspaceEnvVars)+1)
+			copy(branchEnv, workspaceEnvVars)
+			branchEnv = append(branchEnv, corev1.EnvVar{
+				Name:  "AXON_BRANCH",
+				Value: task.Spec.Branch,
+			})
+			branchSetupContainer := corev1.Container{
+				Name:         "branch-setup",
+				Image:        GitCloneImage,
+				Command:      []string{"sh", "-c", branchSetupScript},
+				Env:          branchEnv,
+				VolumeMounts: []corev1.VolumeMount{volumeMount},
+				SecurityContext: &corev1.SecurityContext{
+					RunAsUser: &agentUID,
+				},
+			}
+			initContainers = append(initContainers, branchSetupContainer)
+		}
 
 		if len(workspace.Files) > 0 {
 			injectionScript, err := buildWorkspaceFileInjectionScript(workspace.Files)

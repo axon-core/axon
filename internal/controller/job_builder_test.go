@@ -2293,3 +2293,229 @@ func TestBuildJob_AgentConfigPluginNamePathTraversal(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildJob_BranchSetupInitContainer(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-branch",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Work on feature",
+			Branch: "feature-x",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		Ref:  "main",
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	// Find the branch-setup init container.
+	var branchSetup *corev1.Container
+	for i := range job.Spec.Template.Spec.InitContainers {
+		if job.Spec.Template.Spec.InitContainers[i].Name == "branch-setup" {
+			branchSetup = &job.Spec.Template.Spec.InitContainers[i]
+			break
+		}
+	}
+	if branchSetup == nil {
+		t.Fatal("Expected branch-setup init container")
+	}
+
+	// Verify command structure.
+	if len(branchSetup.Command) != 3 || branchSetup.Command[0] != "sh" || branchSetup.Command[1] != "-c" {
+		t.Fatalf("Expected command [sh -c ...], got %v", branchSetup.Command)
+	}
+	script := branchSetup.Command[2]
+	if !strings.Contains(script, "$AXON_BRANCH") {
+		t.Error("Expected branch-setup script to reference $AXON_BRANCH")
+	}
+	if !strings.Contains(script, "git checkout") {
+		t.Error("Expected branch-setup script to include git checkout")
+	}
+	if !strings.Contains(script, "git fetch") {
+		t.Error("Expected branch-setup script to include git fetch")
+	}
+	// Without secretRef, no credential helper should be used.
+	if strings.Contains(script, "credential.helper") {
+		t.Error("Expected no credential helper without secretRef")
+	}
+
+	// Verify AXON_BRANCH env var on init container.
+	var foundBranch bool
+	for _, env := range branchSetup.Env {
+		if env.Name == "AXON_BRANCH" && env.Value == "feature-x" {
+			foundBranch = true
+		}
+	}
+	if !foundBranch {
+		t.Error("Expected AXON_BRANCH=feature-x env var on branch-setup")
+	}
+
+	// Verify AXON_BRANCH env var on main container.
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	var foundMainBranch bool
+	for _, env := range mainContainer.Env {
+		if env.Name == "AXON_BRANCH" && env.Value == "feature-x" {
+			foundMainBranch = true
+		}
+	}
+	if !foundMainBranch {
+		t.Error("Expected AXON_BRANCH=feature-x env var on main container")
+	}
+}
+
+func TestBuildJob_BranchSetupWithSecretRefUsesCredentialHelper(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-branch-cred",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Work on feature",
+			Branch: "feature-y",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		Ref:  "main",
+		SecretRef: &axonv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	var branchSetup *corev1.Container
+	for i := range job.Spec.Template.Spec.InitContainers {
+		if job.Spec.Template.Spec.InitContainers[i].Name == "branch-setup" {
+			branchSetup = &job.Spec.Template.Spec.InitContainers[i]
+			break
+		}
+	}
+	if branchSetup == nil {
+		t.Fatal("Expected branch-setup init container")
+	}
+
+	script := branchSetup.Command[2]
+	if !strings.Contains(script, "credential.helper") {
+		t.Error("Expected branch-setup script to include credential helper when secretRef is set")
+	}
+
+	// Verify GITHUB_TOKEN env var is present on branch-setup.
+	var foundToken bool
+	for _, env := range branchSetup.Env {
+		if env.Name == "GITHUB_TOKEN" {
+			foundToken = true
+		}
+	}
+	if !foundToken {
+		t.Error("Expected GITHUB_TOKEN env var on branch-setup init container")
+	}
+}
+
+func TestBuildJob_BranchWithoutWorkspaceNoInitContainer(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-branch-no-ws",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Work on feature",
+			Branch: "feature-z",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	// Without workspace, no init containers should exist.
+	if len(job.Spec.Template.Spec.InitContainers) != 0 {
+		t.Errorf("Expected 0 init containers without workspace, got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+
+	// AXON_BRANCH should still be set on the main container.
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	var foundBranch bool
+	for _, env := range mainContainer.Env {
+		if env.Name == "AXON_BRANCH" && env.Value == "feature-z" {
+			foundBranch = true
+		}
+	}
+	if !foundBranch {
+		t.Error("Expected AXON_BRANCH=feature-z env var even without workspace")
+	}
+}
+
+func TestBuildJob_BranchEnvDoesNotMutateWorkspaceEnvVars(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-branch-env-safety",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Work on feature",
+			Branch: "feature-w",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		Ref:  "main",
+		SecretRef: &axonv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	// The git-clone init container should NOT have AXON_BRANCH in its env.
+	gitClone := job.Spec.Template.Spec.InitContainers[0]
+	if gitClone.Name != "git-clone" {
+		t.Fatalf("Expected first init container to be git-clone, got %s", gitClone.Name)
+	}
+	for _, env := range gitClone.Env {
+		if env.Name == "AXON_BRANCH" {
+			t.Error("git-clone init container should not have AXON_BRANCH env var (slice mutation bug)")
+		}
+	}
+}

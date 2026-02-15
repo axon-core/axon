@@ -49,6 +49,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 		envFlags       []string
 		agentConfigRef string
 		dependsOn      []string
+		branch         string
 	)
 
 	cmd := &cobra.Command{
@@ -206,6 +207,10 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 			if len(dependsOn) > 0 {
 				task.Spec.DependsOn = dependsOn
 			}
+			if branch != "" {
+				task.Spec.Branch = branch
+			}
+
 			if workspace != "" {
 				task.Spec.WorkspaceRef = &axonv1alpha1.WorkspaceReference{
 					Name: workspace,
@@ -287,6 +292,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().StringArrayVar(&envFlags, "env", nil, "additional environment variables for the agent (NAME=VALUE)")
 	cmd.Flags().StringVar(&agentConfigRef, "agent-config", "", "name of AgentConfig resource to use")
 	cmd.Flags().StringArrayVar(&dependsOn, "depends-on", nil, "Task names this task depends on (repeatable)")
+	cmd.Flags().StringVar(&branch, "branch", "", "Git branch to work on")
 
 	cmd.MarkFlagRequired("prompt")
 

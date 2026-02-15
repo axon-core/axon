@@ -81,11 +81,12 @@ var _ = BeforeSuite(func() {
 	tokenClient.Client = mockGitHubServer.Client()
 
 	err = (&controller.TaskReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		JobBuilder:  controller.NewJobBuilder(),
-		TokenClient: tokenClient,
-		Recorder:    mgr.GetEventRecorderFor("axon-controller"),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		JobBuilder:   controller.NewJobBuilder(),
+		TokenClient:  tokenClient,
+		Recorder:     mgr.GetEventRecorderFor("axon-controller"),
+		BranchLocker: controller.NewBranchLocker(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
