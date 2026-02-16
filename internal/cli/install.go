@@ -31,6 +31,7 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	var dryRun bool
 	var flagVersion string
 	var imagePullPolicy string
+	var skipRBAC bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -70,13 +71,18 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 
 			ctx := cmd.Context()
 
+			var filter func(*unstructured.Unstructured) bool
+			if skipRBAC {
+				filter = excludeClusterRBAC
+			}
+
 			fmt.Fprintf(os.Stdout, "Installing axon CRDs\n")
-			if err := applyManifests(ctx, dc, dyn, manifests.InstallCRD); err != nil {
+			if err := applyManifests(ctx, dc, dyn, manifests.InstallCRD, filter); err != nil {
 				return fmt.Errorf("installing CRDs: %w", err)
 			}
 
 			fmt.Fprintf(os.Stdout, "Installing axon controller (version: %s)\n", version.Version)
-			if err := applyManifests(ctx, dc, dyn, controllerManifest); err != nil {
+			if err := applyManifests(ctx, dc, dyn, controllerManifest, filter); err != nil {
 				return fmt.Errorf("installing controller: %w", err)
 			}
 
@@ -88,6 +94,7 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the manifests that would be applied without installing")
 	cmd.Flags().StringVar(&flagVersion, "version", "", "override the version used for image tags (defaults to the binary version)")
 	cmd.Flags().StringVar(&imagePullPolicy, "image-pull-policy", "", "set imagePullPolicy on controller containers (e.g. Always, IfNotPresent, Never)")
+	cmd.Flags().BoolVar(&skipRBAC, "skip-rbac", false, "skip applying cluster-scoped RBAC resources (ClusterRole, ClusterRoleBinding)")
 
 	return cmd
 }
@@ -156,12 +163,12 @@ func newUninstallCommand(cfg *ClientConfig) *cobra.Command {
 			ctx := cmd.Context()
 
 			fmt.Fprintf(os.Stdout, "Removing axon controller\n")
-			if err := deleteManifests(ctx, dc, dyn, manifests.InstallController); err != nil {
+			if err := deleteManifests(ctx, dc, dyn, manifests.InstallController, nil); err != nil {
 				return fmt.Errorf("removing controller: %w", err)
 			}
 
 			fmt.Fprintf(os.Stdout, "Removing axon CRDs\n")
-			if err := deleteManifests(ctx, dc, dyn, manifests.InstallCRD); err != nil {
+			if err := deleteManifests(ctx, dc, dyn, manifests.InstallCRD, nil); err != nil {
 				return fmt.Errorf("removing CRDs: %w", err)
 			}
 
@@ -230,9 +237,23 @@ func resourceClient(mapper meta.RESTMapper, dyn dynamic.Interface, obj *unstruct
 	return dyn.Resource(mapping.Resource), nil
 }
 
+// clusterRBACKinds is the set of cluster-scoped RBAC resource kinds that
+// are skipped when --skip-rbac is used.
+var clusterRBACKinds = map[string]bool{
+	"ClusterRole":        true,
+	"ClusterRoleBinding": true,
+}
+
+// excludeClusterRBAC returns true for objects that should be skipped when
+// the --skip-rbac flag is set.
+func excludeClusterRBAC(obj *unstructured.Unstructured) bool {
+	return clusterRBACKinds[obj.GetKind()]
+}
+
 // applyManifests parses multi-document YAML and applies each object using
-// server-side apply.
-func applyManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte) error {
+// server-side apply. If exclude is non-nil, objects for which it returns
+// true are skipped.
+func applyManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte, exclude func(*unstructured.Unstructured) bool) error {
 	objs, err := parseManifests(data)
 	if err != nil {
 		return err
@@ -242,6 +263,9 @@ func applyManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dy
 		return err
 	}
 	for _, obj := range objs {
+		if exclude != nil && exclude(obj) {
+			continue
+		}
 		rc, err := resourceClient(mapper, dyn, obj)
 		if err != nil {
 			return err
@@ -261,8 +285,9 @@ func applyManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dy
 }
 
 // deleteManifests parses multi-document YAML and deletes each object,
-// ignoring not-found errors for idempotent uninstalls.
-func deleteManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte) error {
+// ignoring not-found errors for idempotent uninstalls. If exclude is
+// non-nil, objects for which it returns true are skipped.
+func deleteManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn dynamic.Interface, data []byte, exclude func(*unstructured.Unstructured) bool) error {
 	objs, err := parseManifests(data)
 	if err != nil {
 		return err
@@ -272,6 +297,9 @@ func deleteManifests(ctx context.Context, dc discovery.DiscoveryInterface, dyn d
 		return err
 	}
 	for _, obj := range objs {
+		if exclude != nil && exclude(obj) {
+			continue
+		}
 		rc, err := resourceClient(mapper, dyn, obj)
 		if err != nil {
 			// If the resource type is not found (e.g. CRDs already deleted),

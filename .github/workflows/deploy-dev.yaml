@@ -51,7 +51,7 @@ jobs:
 
       - name: Install axon
         run: |
-          bin/axon install --version main --image-pull-policy Always
+          bin/axon install --version main --image-pull-policy Always --skip-rbac
           kubectl rollout restart deployment/axon-controller-manager -n axon-system
           kubectl rollout status deployment/axon-controller-manager -n axon-system --timeout=120s
           kubectl rollout restart deployment -l app.kubernetes.io/component=spawner -n "${AXON_NAMESPACE}"

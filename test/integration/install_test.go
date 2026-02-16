@@ -157,6 +157,44 @@ var _ = Describe("Install/Uninstall", Ordered, func() {
 			root2.SetArgs([]string{"install", "--kubeconfig", kubeconfigPath})
 			Expect(root2.Execute()).To(Succeed())
 		})
+
+		It("Should skip ClusterRole and ClusterRoleBinding with --skip-rbac", func() {
+			root := cli.NewRootCommand()
+			root.SetArgs([]string{"install", "--kubeconfig", kubeconfigPath, "--skip-rbac"})
+			Expect(root.Execute()).To(Succeed())
+
+			By("Verifying the axon-system namespace exists")
+			ns := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "axon-system"}, ns)).To(Succeed())
+
+			By("Verifying the controller ServiceAccount exists")
+			sa := &corev1.ServiceAccount{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "axon-controller",
+				Namespace: "axon-system",
+			}, sa)).To(Succeed())
+
+			By("Verifying the ClusterRole was NOT created")
+			cr := &rbacv1.ClusterRole{}
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name: "axon-controller-role",
+			}, cr)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected ClusterRole to not exist")
+
+			By("Verifying the ClusterRoleBinding was NOT created")
+			crb := &rbacv1.ClusterRoleBinding{}
+			err = k8sClient.Get(ctx, types.NamespacedName{
+				Name: "axon-controller-rolebinding",
+			}, crb)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected ClusterRoleBinding to not exist")
+
+			By("Verifying the Deployment exists")
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "axon-controller-manager",
+				Namespace: "axon-system",
+			}, dep)).To(Succeed())
+		})
 	})
 
 	Context("axon uninstall", func() {
