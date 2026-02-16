@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/axon-core/axon/internal/manifests"
-	"github.com/axon-core/axon/internal/version"
 )
 
 func TestParseManifests_SingleDocument(t *testing.T) {
@@ -214,24 +213,16 @@ func TestUninstallCommand_RejectsExtraArgs(t *testing.T) {
 }
 
 func TestVersionedManifest_Latest(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
-
-	version.Version = "latest"
 	data := []byte("image: gjkim42/axon-controller:latest")
-	result := versionedManifest(data)
+	result := versionedManifest(data, "latest")
 	if !bytes.Equal(result, data) {
 		t.Errorf("expected manifest unchanged for latest version, got %s", string(result))
 	}
 }
 
 func TestVersionedManifest_Tagged(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
-
-	version.Version = "v0.1.0"
 	data := []byte("image: gjkim42/axon-controller:latest")
-	result := versionedManifest(data)
+	result := versionedManifest(data, "v0.1.0")
 	expected := []byte("image: gjkim42/axon-controller:v0.1.0")
 	if !bytes.Equal(result, expected) {
 		t.Errorf("expected %s, got %s", string(expected), string(result))
@@ -239,15 +230,11 @@ func TestVersionedManifest_Tagged(t *testing.T) {
 }
 
 func TestVersionedManifest_MultipleImages(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
-
-	version.Version = "v0.2.0"
 	data := []byte(`image: gjkim42/axon-controller:latest
 args:
   - --spawner-image=gjkim42/axon-spawner:latest
   - --claude-code-image=gjkim42/claude-code:latest`)
-	result := versionedManifest(data)
+	result := versionedManifest(data, "v0.2.0")
 	if bytes.Contains(result, []byte(":latest")) {
 		t.Errorf("expected all :latest tags to be replaced, got %s", string(result))
 	}
@@ -257,11 +244,7 @@ args:
 }
 
 func TestVersionedManifest_EmbeddedController(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
-
-	version.Version = "v1.0.0"
-	result := versionedManifest(manifests.InstallController)
+	result := versionedManifest(manifests.InstallController, "v1.0.0")
 	if bytes.Contains(result, []byte(":latest")) {
 		t.Error("Expected all :latest tags to be replaced in embedded controller manifest")
 	}
@@ -271,15 +254,14 @@ func TestVersionedManifest_EmbeddedController(t *testing.T) {
 }
 
 func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
-	original := version.Version
-	defer func() { version.Version = original }()
-
 	// Verify the embedded manifest contains image flags that will be versioned.
 	expectedArgs := []string{
 		"--claude-code-image=gjkim42/claude-code:",
 		"--codex-image=gjkim42/codex:",
 		"--gemini-image=gjkim42/gemini:",
+		"--opencode-image=gjkim42/opencode:",
 		"--spawner-image=gjkim42/axon-spawner:",
+		"--token-refresher-image=gjkim42/axon-token-refresher:",
 	}
 	for _, arg := range expectedArgs {
 		if !bytes.Contains(manifests.InstallController, []byte(arg)) {
@@ -288,18 +270,100 @@ func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
 	}
 
 	// Verify all image args get the pinned version after substitution.
-	version.Version = "v0.3.0"
-	result := versionedManifest(manifests.InstallController)
+	result := versionedManifest(manifests.InstallController, "v0.3.0")
 	versionedArgs := []string{
 		"--claude-code-image=gjkim42/claude-code:v0.3.0",
 		"--codex-image=gjkim42/codex:v0.3.0",
 		"--gemini-image=gjkim42/gemini:v0.3.0",
+		"--opencode-image=gjkim42/opencode:v0.3.0",
 		"--spawner-image=gjkim42/axon-spawner:v0.3.0",
+		"--token-refresher-image=gjkim42/axon-token-refresher:v0.3.0",
 	}
 	for _, arg := range versionedArgs {
 		if !bytes.Contains(result, []byte(arg)) {
 			t.Errorf("expected versioned manifest to contain %q", arg)
 		}
+	}
+}
+
+func TestWithImagePullPolicy(t *testing.T) {
+	data := []byte(`      containers:
+        - name: manager
+          image: gjkim42/axon-controller:v0.1.0
+          args:
+            - --leader-elect
+            - --claude-code-image=gjkim42/claude-code:v0.1.0
+            - --spawner-image=gjkim42/axon-spawner:v0.1.0`)
+	result := withImagePullPolicy(data, "Always")
+	// Verify container imagePullPolicy appears right after the image line.
+	expected := []byte("          image: gjkim42/axon-controller:v0.1.0\n          imagePullPolicy: Always\n")
+	if !bytes.Contains(result, expected) {
+		t.Errorf("expected imagePullPolicy right after image line, got:\n%s", string(result))
+	}
+	// Verify per-image pull policy args are inserted after each --*-image= arg.
+	for _, arg := range []string{
+		"--claude-code-image-pull-policy=Always",
+		"--spawner-image-pull-policy=Always",
+	} {
+		if !bytes.Contains(result, []byte(arg)) {
+			t.Errorf("expected %q in result, got:\n%s", arg, string(result))
+		}
+	}
+	// Verify --leader-elect does not get a pull policy arg.
+	if bytes.Contains(result, []byte("--leader-elect-pull-policy")) {
+		t.Errorf("unexpected pull policy for --leader-elect, got:\n%s", string(result))
+	}
+}
+
+func TestWithImagePullPolicy_EmbeddedController(t *testing.T) {
+	result := withImagePullPolicy(manifests.InstallController, "IfNotPresent")
+	if !bytes.Contains(result, []byte("imagePullPolicy: IfNotPresent")) {
+		t.Errorf("expected imagePullPolicy: IfNotPresent in embedded controller manifest, got:\n%s", string(result[:min(len(result), 500)]))
+	}
+	for _, arg := range []string{
+		"--claude-code-image-pull-policy=IfNotPresent",
+		"--codex-image-pull-policy=IfNotPresent",
+		"--gemini-image-pull-policy=IfNotPresent",
+		"--opencode-image-pull-policy=IfNotPresent",
+		"--spawner-image-pull-policy=IfNotPresent",
+		"--token-refresher-image-pull-policy=IfNotPresent",
+	} {
+		if !bytes.Contains(result, []byte(arg)) {
+			t.Errorf("expected %q in result", arg)
+		}
+	}
+}
+
+func TestInstallCommand_ImagePullPolicyFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--image-pull-policy", "Always"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "imagePullPolicy: Always") {
+		t.Errorf("expected imagePullPolicy: Always in output, got:\n%s", output[:min(len(output), 500)])
+	}
+}
+
+func TestInstallCommand_VersionFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--version", "v0.5.0"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if strings.Contains(output, ":latest") {
+		t.Errorf("expected all :latest tags to be replaced, got:\n%s", output[:min(len(output), 500)])
+	}
+	if !strings.Contains(output, ":v0.5.0") {
+		t.Errorf("expected :v0.5.0 tags in output, got:\n%s", output[:min(len(output), 500)])
 	}
 }
 
