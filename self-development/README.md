@@ -5,6 +5,7 @@ This directory contains real-world orchestration patterns used by the Axon proje
 ## Overview
 
 These TaskSpawners demonstrate how to orchestrate fully autonomous AI workers that:
+- Triage incoming issues with appropriate labels
 - Monitor GitHub issues
 - Investigate and fix problems
 - Create or update pull requests
@@ -128,6 +129,28 @@ kubectl get taskspawner axon-workers -o yaml
 
 # View logs from a specific task
 kubectl logs -l job-name=<job-name> -f
+```
+
+### axon-triage.yaml
+
+This TaskSpawner automatically triages new GitHub issues by reading their content and applying appropriate labels (`kind/*`, `priority/*`, `actor/*`, `triage-accepted`).
+
+**Key features:**
+- Watches issues labeled `needs-triage` (applied automatically by the label workflow)
+- Reads the issue body, comments, and codebase to determine appropriate labels
+- Applies `kind/*`, `priority/*`, and `actor/*` labels based on decision guidelines
+- Marks issues as `triage-accepted` when done, which removes `needs-triage` automatically
+- Falls back to `axon/needs-input` when the issue is ambiguous
+- Uses a cheaper model (sonnet) since triage doesn't require code generation
+
+**Deploy:**
+```bash
+kubectl apply -f self-development/axon-triage.yaml
+```
+
+**How it fits in the pipeline:**
+```
+Issue created → label.yaml adds needs-triage → axon-triage labels it → axon-workers picks it up (if actor/axon)
 ```
 
 ### axon-fake-user.yaml
