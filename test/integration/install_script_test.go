@@ -13,10 +13,17 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Install Script", func() {
-	It("Should install the axon CLI binary", func() {
-		By("Building the axon binary for the current platform")
-		repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+var _ = Describe("Install Script", Ordered, func() {
+	var (
+		repoRoot   string
+		binaryData []byte
+		binaryName string
+		server     *httptest.Server
+	)
+
+	BeforeAll(func() {
+		var err error
+		repoRoot, err = filepath.Abs(filepath.Join("..", ".."))
 		Expect(err).NotTo(HaveOccurred())
 
 		buildCmd := exec.Command("make", "build", "WHAT=cmd/axon")
@@ -28,12 +35,14 @@ var _ = Describe("Install Script", func() {
 		builtBinary := filepath.Join(repoRoot, "bin", "axon")
 		Expect(builtBinary).To(BeAnExistingFile())
 
-		By("Starting a local HTTP server to serve the binary")
-		binaryData, err := os.ReadFile(builtBinary)
+		binaryData, err = os.ReadFile(builtBinary)
 		Expect(err).NotTo(HaveOccurred())
 
-		binaryName := fmt.Sprintf("axon-%s-%s", runtime.GOOS, runtime.GOARCH)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		binaryName = fmt.Sprintf("axon-%s-%s", runtime.GOOS, runtime.GOARCH)
+	})
+
+	BeforeEach(func() {
+		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/"+binaryName {
 				w.WriteHeader(http.StatusOK)
 				w.Write(binaryData)
@@ -41,8 +50,13 @@ var _ = Describe("Install Script", func() {
 			}
 			http.NotFound(w, r)
 		}))
-		defer server.Close()
+	})
 
+	AfterEach(func() {
+		server.Close()
+	})
+
+	It("Should install the axon CLI binary", func() {
 		By("Running hack/install.sh with a temporary install directory")
 		installDir := GinkgoT().TempDir()
 		installScript := filepath.Join(repoRoot, "hack", "install.sh")
@@ -70,5 +84,42 @@ var _ = Describe("Install Script", func() {
 		output, err := versionCmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(output)).NotTo(BeEmpty())
+	})
+
+	It("Should create the install directory if it does not exist", func() {
+		By("Using a non-existent subdirectory as install target")
+		parentDir := GinkgoT().TempDir()
+		installDir := filepath.Join(parentDir, "subdir", "bin")
+		installScript := filepath.Join(repoRoot, "hack", "install.sh")
+
+		cmd := exec.Command("bash", installScript)
+		cmd.Env = append(os.Environ(),
+			"AXON_RELEASE_URL="+server.URL,
+			"INSTALL_DIR="+installDir,
+		)
+		cmd.Stdout = GinkgoWriter
+		cmd.Stderr = GinkgoWriter
+		Expect(cmd.Run()).To(Succeed())
+
+		By("Verifying the directory was created and binary was installed")
+		installedBinary := filepath.Join(installDir, "axon")
+		Expect(installedBinary).To(BeAnExistingFile())
+	})
+
+	It("Should fail when install directory is not writable", func() {
+		By("Creating a read-only directory")
+		parentDir := GinkgoT().TempDir()
+		installDir := filepath.Join(parentDir, "readonly")
+		Expect(os.MkdirAll(installDir, 0555)).To(Succeed())
+		installScript := filepath.Join(repoRoot, "hack", "install.sh")
+
+		cmd := exec.Command("bash", installScript)
+		cmd.Env = append(os.Environ(),
+			"AXON_RELEASE_URL="+server.URL,
+			"INSTALL_DIR="+installDir,
+		)
+		output, err := cmd.CombinedOutput()
+		Expect(err).To(HaveOccurred())
+		Expect(string(output)).To(ContainSubstring("not writable"))
 	})
 })
