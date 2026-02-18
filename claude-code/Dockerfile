@@ -27,7 +27,8 @@ RUN ARCH=$(dpkg --print-architecture) \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-RUN npm install -g @anthropic-ai/claude-code
+ARG CLAUDE_CODE_VERSION=2.1.45
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 COPY claude-code/axon_entrypoint.sh /axon_entrypoint.sh
 RUN chmod +x /axon_entrypoint.sh

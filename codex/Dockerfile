@@ -27,7 +27,8 @@ RUN ARCH=$(dpkg --print-architecture) \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-RUN npm install -g @openai/codex
+ARG CODEX_VERSION=0.103.0
+RUN npm install -g @openai/codex@${CODEX_VERSION}
 
 COPY codex/axon_entrypoint.sh /axon_entrypoint.sh
 RUN chmod +x /axon_entrypoint.sh
