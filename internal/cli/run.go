@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -324,10 +325,25 @@ func watchTask(ctx context.Context, cl client.Client, name, namespace string) er
 		}
 
 		if task.Status.Phase == axonv1alpha1.TaskPhaseSucceeded || task.Status.Phase == axonv1alpha1.TaskPhaseFailed {
+			printTaskResults(os.Stdout, task)
 			return nil
 		}
 
 		time.Sleep(2 * time.Second)
+	}
+}
+
+// printTaskResults prints the key outputs (branch, PR, commit, cost) from a
+// completed task. Only fields that are populated are shown.
+func printTaskResults(w io.Writer, task *axonv1alpha1.Task) {
+	if len(task.Status.Results) == 0 {
+		return
+	}
+	keys := []string{"branch", "pr", "commit", "cost-usd", "input-tokens", "output-tokens"}
+	for _, k := range keys {
+		if v, ok := task.Status.Results[k]; ok && v != "" {
+			fmt.Fprintf(w, "  %-20s%s\n", k+":", v)
+		}
 	}
 }
 

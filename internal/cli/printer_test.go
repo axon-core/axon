@@ -323,3 +323,78 @@ func TestPrintWorkspaceDetailWithoutOptionalFields(t *testing.T) {
 		t.Errorf("expected no Secret field when secretRef is nil, got %q", output)
 	}
 }
+
+func TestPrintTaskResults(t *testing.T) {
+	tests := []struct {
+		name     string
+		task     *axonv1alpha1.Task
+		wantKeys []string
+		noKeys   []string
+	}{
+		{
+			name: "shows pr and branch when present",
+			task: &axonv1alpha1.Task{
+				Status: axonv1alpha1.TaskStatus{
+					Results: map[string]string{
+						"branch": "axon-task-abc12",
+						"pr":     "https://github.com/org/repo/pull/42",
+						"commit": "abc1234",
+					},
+				},
+			},
+			wantKeys: []string{"branch:", "pr:", "commit:"},
+		},
+		{
+			name: "shows cost and token usage when present",
+			task: &axonv1alpha1.Task{
+				Status: axonv1alpha1.TaskStatus{
+					Results: map[string]string{
+						"cost-usd":      "1.23",
+						"input-tokens":  "5000",
+						"output-tokens": "1200",
+					},
+				},
+			},
+			wantKeys: []string{"cost-usd:", "input-tokens:", "output-tokens:"},
+		},
+		{
+			name: "prints nothing when results are empty",
+			task: &axonv1alpha1.Task{
+				Status: axonv1alpha1.TaskStatus{},
+			},
+			noKeys: []string{"branch:", "pr:", "cost-usd:"},
+		},
+		{
+			name: "skips empty result values",
+			task: &axonv1alpha1.Task{
+				Status: axonv1alpha1.TaskStatus{
+					Results: map[string]string{
+						"branch": "",
+						"pr":     "https://github.com/org/repo/pull/99",
+					},
+				},
+			},
+			wantKeys: []string{"pr:"},
+			noKeys:   []string{"branch:"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			printTaskResults(&buf, tt.task)
+			output := buf.String()
+
+			for _, key := range tt.wantKeys {
+				if !strings.Contains(output, key) {
+					t.Errorf("expected %q in output, got %q", key, output)
+				}
+			}
+			for _, key := range tt.noKeys {
+				if strings.Contains(output, key) {
+					t.Errorf("expected %q NOT in output, got %q", key, output)
+				}
+			}
+		})
+	}
+}
