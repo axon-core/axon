@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO="axon-core/axon"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -41,11 +41,26 @@ fi
 
 chmod +x "$TMP"
 
+if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+  echo "Error: could not create ${INSTALL_DIR}" >&2
+  echo "Set INSTALL_DIR to a writable path and try again" >&2
+  rm -f "$TMP"
+  exit 1
+fi
+
 if [ -w "$INSTALL_DIR" ]; then
   mv "$TMP" "${INSTALL_DIR}/axon"
 else
-  echo "Installing to ${INSTALL_DIR} (requires sudo)..."
-  sudo mv "$TMP" "${INSTALL_DIR}/axon"
+  echo "Error: ${INSTALL_DIR} is not writable" >&2
+  echo "Set INSTALL_DIR to a writable path and try again" >&2
+  rm -f "$TMP"
+  exit 1
 fi
 
 echo "axon installed to ${INSTALL_DIR}/axon"
+
+if ! echo "$PATH" | tr ':' '\n' | grep -Fqx "$INSTALL_DIR"; then
+  echo ""
+  echo "Add axon to your PATH by adding the following to your shell profile:"
+  echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
+fi
