@@ -27,7 +27,8 @@ RUN ARCH=$(dpkg --print-architecture) \
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-RUN npm install -g opencode-ai
+ARG OPENCODE_VERSION=1.2.6
+RUN npm install -g opencode-ai@${OPENCODE_VERSION}
 
 COPY opencode/axon_entrypoint.sh /axon_entrypoint.sh
 RUN chmod +x /axon_entrypoint.sh
