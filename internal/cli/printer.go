@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -14,19 +15,44 @@ import (
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
 )
 
+func taskDuration(status *axonv1alpha1.TaskStatus) string {
+	if status.StartTime == nil {
+		return "-"
+	}
+	if status.CompletionTime != nil {
+		return duration.HumanDuration(status.CompletionTime.Time.Sub(status.StartTime.Time))
+	}
+	return duration.HumanDuration(time.Since(status.StartTime.Time))
+}
+
 func printTaskTable(w io.Writer, tasks []axonv1alpha1.Task, allNamespaces bool) {
 	tw := tabwriter.NewWriter(w, 0, 0, 3, ' ', 0)
 	if allNamespaces {
-		fmt.Fprintln(tw, "NAMESPACE\tNAME\tTYPE\tPHASE\tAGE")
+		fmt.Fprintln(tw, "NAMESPACE\tNAME\tTYPE\tPHASE\tBRANCH\tWORKSPACE\tAGENT CONFIG\tDURATION\tAGE")
 	} else {
-		fmt.Fprintln(tw, "NAME\tTYPE\tPHASE\tAGE")
+		fmt.Fprintln(tw, "NAME\tTYPE\tPHASE\tBRANCH\tWORKSPACE\tAGENT CONFIG\tDURATION\tAGE")
 	}
 	for _, t := range tasks {
 		age := duration.HumanDuration(time.Since(t.CreationTimestamp.Time))
+		branch := "-"
+		if t.Spec.Branch != "" {
+			branch = t.Spec.Branch
+		}
+		workspace := "-"
+		if t.Spec.WorkspaceRef != nil {
+			workspace = t.Spec.WorkspaceRef.Name
+		}
+		agentConfig := "-"
+		if t.Spec.AgentConfigRef != nil {
+			agentConfig = t.Spec.AgentConfigRef.Name
+		}
+		dur := taskDuration(&t.Status)
 		if allNamespaces {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Namespace, t.Name, t.Spec.Type, t.Status.Phase, age)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				t.Namespace, t.Name, t.Spec.Type, t.Status.Phase, branch, workspace, agentConfig, dur, age)
 		} else {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", t.Name, t.Spec.Type, t.Status.Phase, age)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				t.Name, t.Spec.Type, t.Status.Phase, branch, workspace, agentConfig, dur, age)
 		}
 	}
 	tw.Flush()
@@ -43,8 +69,26 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	if t.Spec.Model != "" {
 		printField(w, "Model", t.Spec.Model)
 	}
+	if t.Spec.Image != "" {
+		printField(w, "Image", t.Spec.Image)
+	}
+	if t.Spec.Branch != "" {
+		printField(w, "Branch", t.Spec.Branch)
+	}
+	if len(t.Spec.DependsOn) > 0 {
+		printField(w, "Depends On", strings.Join(t.Spec.DependsOn, ", "))
+	}
 	if t.Spec.WorkspaceRef != nil {
 		printField(w, "Workspace", t.Spec.WorkspaceRef.Name)
+	}
+	if t.Spec.AgentConfigRef != nil {
+		printField(w, "Agent Config", t.Spec.AgentConfigRef.Name)
+	}
+	if t.Spec.TTLSecondsAfterFinished != nil {
+		printField(w, "TTL", fmt.Sprintf("%ds", *t.Spec.TTLSecondsAfterFinished))
+	}
+	if t.Spec.PodOverrides != nil && t.Spec.PodOverrides.ActiveDeadlineSeconds != nil {
+		printField(w, "Timeout", fmt.Sprintf("%ds", *t.Spec.PodOverrides.ActiveDeadlineSeconds))
 	}
 	if t.Status.JobName != "" {
 		printField(w, "Job", t.Status.JobName)
@@ -57,6 +101,10 @@ func printTaskDetail(w io.Writer, t *axonv1alpha1.Task) {
 	}
 	if t.Status.CompletionTime != nil {
 		printField(w, "Completion Time", t.Status.CompletionTime.Time.Format(time.RFC3339))
+	}
+	dur := taskDuration(&t.Status)
+	if dur != "-" {
+		printField(w, "Duration", dur)
 	}
 	if t.Status.Message != "" {
 		printField(w, "Message", t.Status.Message)
