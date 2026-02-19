@@ -439,10 +439,14 @@ The key pattern is `excludeLabels: [axon/needs-input]` — this creates a feedba
 | `axon init` | Initialize `~/.axon/config.yaml` |
 | `axon run` | Create and run a new Task |
 | `axon get <resource>` | List resources (`tasks`, `taskspawners`, `workspaces`) |
+| `axon get <resource> <name>` | View a specific resource in table format |
+| `axon get <resource> <name> -d` | View detailed information for a specific resource |
 | `axon delete <resource> <name>` | Delete a resource |
 | `axon logs <task-name> [-f]` | View or stream logs from a task |
 | `axon suspend taskspawner <name>` | Pause a TaskSpawner |
 | `axon resume taskspawner <name>` | Resume a paused TaskSpawner |
+
+`axon get` supports `-o yaml|json` for structured output and `-A` to list across all namespaces.
 
 See [full CLI reference](docs/reference.md#cli-reference) for all flags and options.
 
