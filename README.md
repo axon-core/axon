@@ -57,8 +57,20 @@ Get running in 5 minutes (most of the time is gathering credentials).
 
 ### Prerequisites
 
-- Kubernetes cluster (1.28+) — don't have one? Create a local cluster with [kind](https://kind.sigs.k8s.io/): `kind create cluster`
-- kubectl configured
+- Kubernetes cluster (1.28+)
+
+<details>
+<summary>Don't have a cluster? Create one locally with kind</summary>
+
+1. [Install kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) (requires Docker)
+2. Create a cluster:
+   ```bash
+   kind create cluster
+   ```
+
+This creates a single-node cluster and configures your kubeconfig automatically.
+
+</details>
 
 ### 1. Install the CLI
 
