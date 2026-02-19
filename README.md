@@ -37,7 +37,7 @@ add-tests     Running   1m
 update-docs   Running   45s
 ```
 
-https://github.com/user-attachments/assets/837cd8d5-4071-42dd-be32-114c649386ff
+https://github.com/user-attachments/assets/0ea57071-15d8-4b3b-a546-d00429b76f8d
 
 See [Autonomous self-development pipeline](#autonomous-self-development-pipeline) for a full end-to-end example.
 
