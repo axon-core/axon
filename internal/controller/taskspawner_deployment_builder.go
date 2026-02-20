@@ -158,6 +158,47 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 		}
 	}
 
+	if ts.Spec.When.Jira != nil {
+		jira := ts.Spec.When.Jira
+		args = append(args,
+			"--jira-base-url="+jira.BaseURL,
+			"--jira-project="+jira.Project,
+		)
+		if jira.JQL != "" {
+			args = append(args, "--jira-jql="+jira.JQL)
+		}
+
+		// JIRA_USER is optional: when present, Jira Cloud basic auth is used
+		// (email + API token). When absent, Bearer token auth is used for
+		// Jira Data Center/Server PATs.
+		optional := true
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "JIRA_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: jira.SecretRef.Name,
+						},
+						Key:      "JIRA_USER",
+						Optional: &optional,
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "JIRA_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: jira.SecretRef.Name,
+						},
+						Key: "JIRA_TOKEN",
+					},
+				},
+			},
+		)
+	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/name":       "axon",
 		"app.kubernetes.io/component":  "spawner",

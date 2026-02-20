@@ -106,7 +106,7 @@ func newTask(name, namespace, spawnerName string, phase axonv1alpha1.TaskPhase) 
 func TestBuildSource_GitHubIssuesWithBaseURL(t *testing.T) {
 	ts := newTaskSpawner("spawner", "default", nil)
 
-	src, err := buildSource(ts, "my-org", "my-repo", "https://github.example.com/api/v3", "")
+	src, err := buildSource(ts, "my-org", "my-repo", "https://github.example.com/api/v3", "", "", "", "")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestBuildSource_GitHubIssuesWithBaseURL(t *testing.T) {
 func TestBuildSource_GitHubIssuesDefaultBaseURL(t *testing.T) {
 	ts := newTaskSpawner("spawner", "default", nil)
 
-	src, err := buildSource(ts, "axon-core", "axon", "", "")
+	src, err := buildSource(ts, "axon-core", "axon", "", "", "", "", "")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -140,6 +140,60 @@ func TestBuildSource_GitHubIssuesDefaultBaseURL(t *testing.T) {
 	}
 	if ghSrc.BaseURL != "" {
 		t.Errorf("BaseURL = %q, want empty (defaults to api.github.com)", ghSrc.BaseURL)
+	}
+}
+
+func TestBuildSource_Jira(t *testing.T) {
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				Jira: &axonv1alpha1.Jira{
+					BaseURL:   "https://mycompany.atlassian.net",
+					Project:   "PROJ",
+					JQL:       "status = Open",
+					SecretRef: axonv1alpha1.SecretReference{Name: "jira-creds"},
+				},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type: "claude-code",
+				Credentials: axonv1alpha1.Credentials{
+					Type:      axonv1alpha1.CredentialTypeOAuth,
+					SecretRef: axonv1alpha1.SecretReference{Name: "creds"},
+				},
+			},
+		},
+	}
+
+	t.Setenv("JIRA_USER", "user@example.com")
+	t.Setenv("JIRA_TOKEN", "jira-api-token")
+
+	src, err := buildSource(ts, "", "", "", "", "https://mycompany.atlassian.net", "PROJ", "status = Open")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	jiraSrc, ok := src.(*source.JiraSource)
+	if !ok {
+		t.Fatalf("Expected *source.JiraSource, got %T", src)
+	}
+	if jiraSrc.BaseURL != "https://mycompany.atlassian.net" {
+		t.Errorf("BaseURL = %q, want %q", jiraSrc.BaseURL, "https://mycompany.atlassian.net")
+	}
+	if jiraSrc.Project != "PROJ" {
+		t.Errorf("Project = %q, want %q", jiraSrc.Project, "PROJ")
+	}
+	if jiraSrc.JQL != "status = Open" {
+		t.Errorf("JQL = %q, want %q", jiraSrc.JQL, "status = Open")
+	}
+	if jiraSrc.User != "user@example.com" {
+		t.Errorf("User = %q, want %q", jiraSrc.User, "user@example.com")
+	}
+	if jiraSrc.Token != "jira-api-token" {
+		t.Errorf("Token = %q, want %q", jiraSrc.Token, "jira-api-token")
 	}
 }
 
