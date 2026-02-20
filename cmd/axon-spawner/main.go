@@ -38,6 +38,9 @@ func main() {
 	var githubRepo string
 	var githubAPIBaseURL string
 	var githubTokenFile string
+	var jiraBaseURL string
+	var jiraProject string
+	var jiraJQL string
 
 	flag.StringVar(&name, "taskspawner-name", "", "Name of the TaskSpawner to manage")
 	flag.StringVar(&namespace, "taskspawner-namespace", "", "Namespace of the TaskSpawner")
@@ -45,6 +48,9 @@ func main() {
 	flag.StringVar(&githubRepo, "github-repo", "", "GitHub repository name")
 	flag.StringVar(&githubAPIBaseURL, "github-api-base-url", "", "GitHub API base URL for enterprise servers (e.g. https://github.example.com/api/v3)")
 	flag.StringVar(&githubTokenFile, "github-token-file", "", "Path to file containing GitHub token (refreshed by sidecar)")
+	flag.StringVar(&jiraBaseURL, "jira-base-url", "", "Jira instance base URL (e.g. https://mycompany.atlassian.net)")
+	flag.StringVar(&jiraProject, "jira-project", "", "Jira project key")
+	flag.StringVar(&jiraJQL, "jira-jql", "", "Optional JQL filter for Jira issues")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -77,7 +83,7 @@ func main() {
 	log.Info("starting spawner", "taskspawner", key)
 
 	for {
-		if err := runCycle(ctx, cl, key, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile); err != nil {
+		if err := runCycle(ctx, cl, key, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL); err != nil {
 			log.Error(err, "discovery cycle failed")
 		}
 
@@ -97,13 +103,13 @@ func main() {
 	}
 }
 
-func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile string) error {
+func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL string) error {
 	var ts axonv1alpha1.TaskSpawner
 	if err := cl.Get(ctx, key, &ts); err != nil {
 		return fmt.Errorf("fetching TaskSpawner: %w", err)
 	}
 
-	src, err := buildSource(&ts, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile)
+	src, err := buildSource(&ts, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL)
 	if err != nil {
 		return fmt.Errorf("building source: %w", err)
 	}
@@ -317,7 +323,7 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 	return nil
 }
 
-func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo, apiBaseURL, tokenFile string) (source.Source, error) {
+func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo, apiBaseURL, tokenFile, jiraBaseURL, jiraProject, jiraJQL string) (source.Source, error) {
 	if ts.Spec.When.GitHubIssues != nil {
 		gh := ts.Spec.When.GitHubIssues
 
@@ -344,6 +350,19 @@ func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo, apiBaseURL, tokenFil
 			State:         gh.State,
 			Token:         token,
 			BaseURL:       apiBaseURL,
+		}, nil
+	}
+
+	if ts.Spec.When.Jira != nil {
+		user := os.Getenv("JIRA_USER")
+		token := os.Getenv("JIRA_TOKEN")
+
+		return &source.JiraSource{
+			BaseURL: jiraBaseURL,
+			Project: jiraProject,
+			JQL:     jiraJQL,
+			User:    user,
+			Token:   token,
 		}, nil
 	}
 

@@ -28,6 +28,10 @@ type When struct {
 	// Cron triggers task spawning on a cron schedule.
 	// +optional
 	Cron *Cron `json:"cron,omitempty"`
+
+	// Jira discovers issues from a Jira project.
+	// +optional
+	Jira *Jira `json:"jira,omitempty"`
 }
 
 // Cron triggers task spawning on a cron schedule.
@@ -61,6 +65,36 @@ type GitHubIssues struct {
 	// +kubebuilder:default=open
 	// +optional
 	State string `json:"state,omitempty"`
+}
+
+// Jira discovers issues from a Jira project.
+// Authentication is provided via a Secret referenced in the TaskSpawner's
+// namespace. The secret must contain a "JIRA_TOKEN" key. For Jira Cloud,
+// include a "JIRA_USER" key with the email address to use Basic auth
+// (email + API token). For Jira Data Center/Server, omit "JIRA_USER" to
+// use Bearer token auth with a personal access token (PAT).
+type Jira struct {
+	// BaseURL is the Jira instance URL (e.g., "https://mycompany.atlassian.net").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern="^https?://.+"
+	BaseURL string `json:"baseUrl"`
+
+	// Project is the Jira project key (e.g., "PROJ").
+	// +kubebuilder:validation:Required
+	Project string `json:"project"`
+
+	// JQL is an optional JQL filter appended to the default query.
+	// When set, the full query is: "project = <project> AND (<jql>)".
+	// When empty, all issues in the project are discovered.
+	// +optional
+	JQL string `json:"jql,omitempty"`
+
+	// SecretRef references a Secret containing a "JIRA_TOKEN" key (required)
+	// and an optional "JIRA_USER" key. When "JIRA_USER" is present, Basic
+	// auth is used (Jira Cloud). When absent, Bearer token auth is used
+	// (Jira Data Center/Server PAT).
+	// +kubebuilder:validation:Required
+	SecretRef SecretReference `json:"secretRef"`
 }
 
 // TaskTemplate defines the template for spawned Tasks.

@@ -1073,6 +1073,40 @@ spec:
                           type: string
                         type: array
                     type: object
+                  jira:
+                    description: Jira discovers issues from a Jira project.
+                    properties:
+                      baseUrl:
+                        description: BaseURL is the Jira instance URL (e.g., "https://mycompany.atlassian.net").
+                        pattern: ^https?://.+
+                        type: string
+                      jql:
+                        description: |-
+                          JQL is an optional JQL filter appended to the default query.
+                          When set, the full query is: "project = <project> AND (<jql>)".
+                          When empty, all issues in the project are discovered.
+                        type: string
+                      project:
+                        description: Project is the Jira project key (e.g., "PROJ").
+                        type: string
+                      secretRef:
+                        description: |-
+                          SecretRef references a Secret containing a "JIRA_TOKEN" key (required)
+                          and an optional "JIRA_USER" key. When "JIRA_USER" is present, Basic
+                          auth is used (Jira Cloud). When absent, Bearer token auth is used
+                          (Jira Data Center/Server PAT).
+                        properties:
+                          name:
+                            description: Name is the name of the secret.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                    required:
+                    - baseUrl
+                    - project
+                    - secretRef
+                    type: object
                 type: object
             required:
             - taskTemplate

@@ -379,6 +379,127 @@ func TestDeploymentBuilder_PAT(t *testing.T) {
 	}
 }
 
+func TestDeploymentBuilder_Jira(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				Jira: &axonv1alpha1.Jira{
+					BaseURL:   "https://mycompany.atlassian.net",
+					Project:   "PROJ",
+					JQL:       "status = Open",
+					SecretRef: axonv1alpha1.SecretReference{Name: "jira-creds"},
+				},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type: "claude-code",
+			},
+		},
+	}
+
+	deploy := builder.Build(ts, nil, false)
+
+	if len(deploy.Spec.Template.Spec.Containers) != 1 {
+		t.Fatalf("expected 1 container, got %d", len(deploy.Spec.Template.Spec.Containers))
+	}
+
+	spawner := deploy.Spec.Template.Spec.Containers[0]
+
+	// Check Jira args
+	foundBaseURL := false
+	foundProject := false
+	foundJQL := false
+	for _, arg := range spawner.Args {
+		switch {
+		case arg == "--jira-base-url=https://mycompany.atlassian.net":
+			foundBaseURL = true
+		case arg == "--jira-project=PROJ":
+			foundProject = true
+		case arg == "--jira-jql=status = Open":
+			foundJQL = true
+		}
+	}
+	if !foundBaseURL {
+		t.Errorf("expected --jira-base-url arg, got args: %v", spawner.Args)
+	}
+	if !foundProject {
+		t.Errorf("expected --jira-project arg, got args: %v", spawner.Args)
+	}
+	if !foundJQL {
+		t.Errorf("expected --jira-jql arg, got args: %v", spawner.Args)
+	}
+
+	// Check env vars
+	if len(spawner.Env) != 2 {
+		t.Fatalf("expected 2 env vars, got %d", len(spawner.Env))
+	}
+
+	envMap := make(map[string]corev1.EnvVar)
+	for _, env := range spawner.Env {
+		envMap[env.Name] = env
+	}
+
+	jiraUser, ok := envMap["JIRA_USER"]
+	if !ok {
+		t.Fatal("expected JIRA_USER env var")
+	}
+	if jiraUser.ValueFrom == nil || jiraUser.ValueFrom.SecretKeyRef == nil {
+		t.Fatal("expected JIRA_USER to reference a secret")
+	}
+	if jiraUser.ValueFrom.SecretKeyRef.Name != "jira-creds" {
+		t.Errorf("JIRA_USER secret name = %q, want %q", jiraUser.ValueFrom.SecretKeyRef.Name, "jira-creds")
+	}
+	if jiraUser.ValueFrom.SecretKeyRef.Optional == nil || !*jiraUser.ValueFrom.SecretKeyRef.Optional {
+		t.Error("expected JIRA_USER secret key ref to be optional")
+	}
+
+	jiraToken, ok := envMap["JIRA_TOKEN"]
+	if !ok {
+		t.Fatal("expected JIRA_TOKEN env var")
+	}
+	if jiraToken.ValueFrom == nil || jiraToken.ValueFrom.SecretKeyRef == nil {
+		t.Fatal("expected JIRA_TOKEN to reference a secret")
+	}
+	if jiraToken.ValueFrom.SecretKeyRef.Name != "jira-creds" {
+		t.Errorf("JIRA_TOKEN secret name = %q, want %q", jiraToken.ValueFrom.SecretKeyRef.Name, "jira-creds")
+	}
+}
+
+func TestDeploymentBuilder_JiraNoJQL(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				Jira: &axonv1alpha1.Jira{
+					BaseURL:   "https://jira.example.com",
+					Project:   "TEST",
+					SecretRef: axonv1alpha1.SecretReference{Name: "jira-creds"},
+				},
+			},
+			TaskTemplate: axonv1alpha1.TaskTemplate{
+				Type: "claude-code",
+			},
+		},
+	}
+
+	deploy := builder.Build(ts, nil, false)
+	spawner := deploy.Spec.Template.Spec.Containers[0]
+
+	for _, arg := range spawner.Args {
+		if arg == "--jira-jql=" || (len(arg) > 10 && arg[:10] == "--jira-jql") {
+			t.Errorf("should not include --jira-jql arg when JQL is empty, got %q", arg)
+		}
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }
 
 func TestUpdateDeployment_SuspendScalesDown(t *testing.T) {
