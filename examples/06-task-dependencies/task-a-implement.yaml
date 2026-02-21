@@ -1,0 +1,17 @@
+apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: implement-feature
+spec:
+  type: claude-code
+  # TODO: Replace with a prompt describing the feature to implement
+  prompt: |
+    Implement a /health endpoint that returns JSON {"status": "ok"}.
+    Create a branch, commit the changes, and open a PR.
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  branch: "orchestrator-example"
