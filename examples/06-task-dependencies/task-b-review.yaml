@@ -1,0 +1,28 @@
+apiVersion: axon.io/v1alpha1
+kind: Task
+metadata:
+  name: review-feature
+spec:
+  type: claude-code
+  # This prompt uses Go template syntax to reference outputs from Task A.
+  # {{ index .Deps "<name>" "Results" "<key>" }} accesses structured outputs.
+  # {{ index .Deps "<name>" "Outputs" }} accesses the raw output list.
+  prompt: |
+    Review the PR at {{ index .Deps "implement-feature" "Results" "pr" }}
+    on branch {{ index .Deps "implement-feature" "Results" "branch" }}.
+
+    Check for:
+    - Correctness and edge cases
+    - Test coverage
+    - Code style and documentation
+
+    Leave a review on the PR with your findings.
+  dependsOn:
+    - implement-feature
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  branch: "orchestrator-example"
