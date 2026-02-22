@@ -1,0 +1,14 @@
+apiVersion: axon.io/v1alpha1
+kind: Workspace
+metadata:
+  name: my-fork
+spec:
+  # TODO: Replace with your fork's repository URL
+  repo: https://github.com/your-user/upstream-repo.git
+  ref: main
+  secretRef:
+    name: github-token
+  remotes:
+    - name: upstream
+      # TODO: Replace with the upstream repository URL
+      url: https://github.com/upstream-org/upstream-repo.git

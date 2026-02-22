@@ -3360,3 +3360,125 @@ func TestBuildJob_RemoteSetupQuotesShellMetacharacters(t *testing.T) {
 		t.Errorf("Expected shell metacharacters to be single-quoted:\nwant substring: %s\ngot script: %s", expected, script)
 	}
 }
+
+func TestBuildJob_WorkspaceWithUpstreamRemoteInjectsEnv(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-upstream-env",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the code",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/repo.git",
+		Ref:  "main",
+		Remotes: []axonv1alpha1.GitRemote{
+			{Name: "upstream", URL: "https://github.com/upstream-org/repo.git"},
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	found := false
+	for _, env := range mainContainer.Env {
+		if env.Name == "AXON_UPSTREAM_REPO" {
+			found = true
+			if env.Value != "upstream-org/repo" {
+				t.Errorf("AXON_UPSTREAM_REPO = %q, want %q", env.Value, "upstream-org/repo")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected AXON_UPSTREAM_REPO env var on main container")
+	}
+}
+
+func TestBuildJob_WorkspaceWithNonUpstreamRemoteNoEnv(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-no-upstream-env",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the code",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/repo.git",
+		Ref:  "main",
+		Remotes: []axonv1alpha1.GitRemote{
+			{Name: "other", URL: "https://github.com/other-org/repo.git"},
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	for _, env := range mainContainer.Env {
+		if env.Name == "AXON_UPSTREAM_REPO" {
+			t.Errorf("Expected no AXON_UPSTREAM_REPO env var, but found value %q", env.Value)
+		}
+	}
+}
+
+func TestBuildJob_WorkspaceWithInvalidUpstreamRemoteNoEnv(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-invalid-upstream",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the code",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/repo.git",
+		Ref:  "main",
+		Remotes: []axonv1alpha1.GitRemote{
+			{Name: "upstream", URL: "not-a-valid-url"},
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	for _, env := range mainContainer.Env {
+		if env.Name == "AXON_UPSTREAM_REPO" {
+			t.Errorf("Expected no AXON_UPSTREAM_REPO for invalid URL, but found value %q", env.Value)
+		}
+	}
+}

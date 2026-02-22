@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
@@ -466,6 +467,87 @@ func TestDeploymentBuilder_Jira(t *testing.T) {
 	}
 	if jiraToken.ValueFrom.SecretKeyRef.Name != "jira-creds" {
 		t.Errorf("JIRA_TOKEN secret name = %q, want %q", jiraToken.ValueFrom.SecretKeyRef.Name, "jira-creds")
+	}
+}
+
+func TestBuildDeploymentWithGitHubIssuesRepoOverride(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				GitHubIssues: &axonv1alpha1.GitHubIssues{
+					Repo: "https://github.com/upstream-org/upstream-repo.git",
+				},
+			},
+		},
+	}
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/upstream-repo.git",
+	}
+
+	deploy := builder.Build(ts, workspace, false)
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+
+	foundOwner := false
+	foundRepo := false
+	for _, arg := range args {
+		if arg == "--github-owner=upstream-org" {
+			foundOwner = true
+		}
+		if arg == "--github-repo=upstream-repo" {
+			foundRepo = true
+		}
+	}
+	if !foundOwner {
+		t.Errorf("expected --github-owner=upstream-org, got args: %v", args)
+	}
+	if !foundRepo {
+		t.Errorf("expected --github-repo=upstream-repo, got args: %v", args)
+	}
+
+	// Verify it's NOT using the fork owner
+	for _, arg := range args {
+		if arg == "--github-owner=my-fork" {
+			t.Errorf("should not use fork owner, got args: %v", args)
+		}
+	}
+}
+
+func TestBuildDeploymentWithGitHubIssuesRepoOverrideEnterprise(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &axonv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpawnerSpec{
+			When: axonv1alpha1.When{
+				GitHubIssues: &axonv1alpha1.GitHubIssues{
+					Repo: "https://github.example.com/upstream-org/upstream-repo.git",
+				},
+			},
+		},
+	}
+	workspace := &axonv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/upstream-repo.git",
+	}
+
+	deploy := builder.Build(ts, workspace, false)
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+
+	foundAPIBaseURL := ""
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--github-api-base-url=") {
+			foundAPIBaseURL = arg
+		}
+	}
+	want := "--github-api-base-url=https://github.example.com/api/v3"
+	if foundAPIBaseURL != want {
+		t.Errorf("got %q, want %q", foundAPIBaseURL, want)
 	}
 }
 

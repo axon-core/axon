@@ -1,0 +1,32 @@
+apiVersion: axon.io/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: fork-issue-fixer
+spec:
+  when:
+    githubIssues:
+      # Poll the upstream repo for issues instead of the fork
+      # TODO: Replace with the upstream repository ("owner/repo" or full URL)
+      repo: https://github.com/upstream-org/upstream-repo.git
+      labels:
+        - bug
+      state: open
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-fork
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    branch: "axon-task-{{.Number}}"
+    promptTemplate: |
+      Fix the following GitHub issue from the upstream repository and open a
+      PR from this fork back to upstream.
+
+      Issue #{{.Number}}: {{.Title}}
+
+      {{.Body}}
+    ttlSecondsAfterFinished: 3600
+  pollInterval: 5m
+  maxConcurrency: 3

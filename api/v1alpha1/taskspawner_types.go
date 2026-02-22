@@ -42,10 +42,20 @@ type Cron struct {
 }
 
 // GitHubIssues discovers issues from a GitHub repository.
-// The repository owner and name are derived from the workspace's repo URL
-// specified in taskTemplate.workspaceRef.
+// By default the repository owner and name are derived from the workspace's
+// repo URL specified in taskTemplate.workspaceRef. Set the Repo field to
+// override this — useful for fork workflows where the workspace points to a
+// fork but issues should be discovered from the upstream repository.
 // If the workspace has a secretRef, it is used for GitHub API authentication.
 type GitHubIssues struct {
+	// Repo optionally overrides the repository to poll for issues, in
+	// "owner/repo" format or as a full URL. When empty, the repository
+	// is derived from the workspace repo URL in taskTemplate.workspaceRef.
+	// Use this for fork workflows where the workspace points to a fork
+	// but issues should be discovered from the upstream repository.
+	// +optional
+	Repo string `json:"repo,omitempty"`
+
 	// Types specifies which item types to discover: "issues", "pulls", or both.
 	// +kubebuilder:validation:Items:Enum=issues;pulls
 	// +kubebuilder:default={"issues"}
