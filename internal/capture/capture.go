@@ -99,7 +99,23 @@ func isGitRepo(r runner) bool {
 }
 
 func capturePRs(r runner, branch string) []string {
-	output, err := r.run("gh", "pr", "list", "--head", branch, "--json", "url")
+	// Check origin repo (current behavior)
+	lines := queryPRs(r, branch, "")
+
+	// Also check upstream repo if set (fork workflow)
+	if upstreamRepo := os.Getenv("AXON_UPSTREAM_REPO"); upstreamRepo != "" {
+		lines = append(lines, queryPRs(r, branch, upstreamRepo)...)
+	}
+
+	return lines
+}
+
+func queryPRs(r runner, branch, repo string) []string {
+	args := []string{"pr", "list", "--head", branch, "--json", "url"}
+	if repo != "" {
+		args = append(args, "--repo", repo)
+	}
+	output, err := r.run("gh", args...)
 	if err != nil || output == "" {
 		return nil
 	}

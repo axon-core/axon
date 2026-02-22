@@ -216,6 +216,20 @@ func (b *JobBuilder) buildAgentJob(task *axonv1alpha1.Task, workspace *axonv1alp
 				Value: workspace.Ref,
 			})
 		}
+
+		// Inject AXON_UPSTREAM_REPO if an "upstream" remote is configured
+		for _, remote := range workspace.Remotes {
+			if remote.Name == "upstream" {
+				_, upstreamOwner, upstreamRepo := parseGitHubRepo(remote.URL)
+				if upstreamOwner != "" && upstreamRepo != "" {
+					envVars = append(envVars, corev1.EnvVar{
+						Name:  "AXON_UPSTREAM_REPO",
+						Value: fmt.Sprintf("%s/%s", upstreamOwner, upstreamRepo),
+					})
+				}
+				break
+			}
+		}
 	}
 
 	if workspace != nil && workspace.SecretRef != nil {

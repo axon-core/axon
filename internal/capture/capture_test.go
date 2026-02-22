@@ -226,9 +226,68 @@ func assertOutputLines(t *testing.T, expected, got []string) {
 	}
 }
 
+func TestCaptureOutputsWithUpstreamRepo(t *testing.T) {
+	r := mockRunner{commands: map[string]mockResult{
+		"git rev-parse --is-inside-work-tree": {output: "true"},
+		"git branch --show-current":           {output: "fix-branch"},
+		"gh pr list --head fix-branch --json url": {
+			output: `[{"url":"https://github.com/my-fork/repo/pull/1"}]`,
+		},
+		"gh pr list --head fix-branch --json url --repo upstream-org/repo": {
+			output: `[{"url":"https://github.com/upstream-org/repo/pull/99"}]`,
+		},
+		"git rev-parse HEAD":                        {output: "abc123"},
+		"git symbolic-ref refs/remotes/origin/HEAD": {output: "refs/remotes/origin/main"},
+	}}
+
+	t.Setenv("AXON_BASE_BRANCH", "")
+	t.Setenv("AXON_AGENT_TYPE", "")
+	t.Setenv("AXON_UPSTREAM_REPO", "upstream-org/repo")
+
+	outputs := captureOutputs(r, "/nonexistent")
+
+	expected := []string{
+		"branch: fix-branch",
+		"pr: https://github.com/my-fork/repo/pull/1",
+		"pr: https://github.com/upstream-org/repo/pull/99",
+		"commit: abc123",
+		"base-branch: main",
+	}
+	assertOutputLines(t, expected, outputs)
+}
+
+func TestCaptureOutputsUpstreamRepoNoPRs(t *testing.T) {
+	r := mockRunner{commands: map[string]mockResult{
+		"git rev-parse --is-inside-work-tree": {output: "true"},
+		"git branch --show-current":           {output: "fix-branch"},
+		"gh pr list --head fix-branch --json url": {
+			output: `[]`,
+		},
+		"gh pr list --head fix-branch --json url --repo upstream-org/repo": {
+			output: `[]`,
+		},
+		"git rev-parse HEAD":                        {output: "abc123"},
+		"git symbolic-ref refs/remotes/origin/HEAD": {output: "refs/remotes/origin/main"},
+	}}
+
+	t.Setenv("AXON_BASE_BRANCH", "")
+	t.Setenv("AXON_AGENT_TYPE", "")
+	t.Setenv("AXON_UPSTREAM_REPO", "upstream-org/repo")
+
+	outputs := captureOutputs(r, "/nonexistent")
+
+	expected := []string{
+		"branch: fix-branch",
+		"commit: abc123",
+		"base-branch: main",
+	}
+	assertOutputLines(t, expected, outputs)
+}
+
 func TestMain(m *testing.M) {
 	// Ensure env vars don't leak between tests by clearing them.
 	os.Unsetenv("AXON_BASE_BRANCH")
 	os.Unsetenv("AXON_AGENT_TYPE")
+	os.Unsetenv("AXON_UPSTREAM_REPO")
 	os.Exit(m.Run())
 }

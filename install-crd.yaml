@@ -1055,6 +1055,14 @@ spec:
                         items:
                           type: string
                         type: array
+                      repo:
+                        description: |-
+                          Repo optionally overrides the repository to poll for issues, in
+                          "owner/repo" format or as a full URL. When empty, the repository
+                          is derived from the workspace repo URL in taskTemplate.workspaceRef.
+                          Use this for fork workflows where the workspace points to a fork
+                          but issues should be discovered from the upstream repository.
+                        type: string
                       state:
                         default: open
                         description: State filters issues by state (open, closed,

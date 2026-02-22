@@ -63,6 +63,12 @@ func (b *DeploymentBuilder) Build(ts *axonv1alpha1.TaskSpawner, workspace *axonv
 
 	if workspace != nil {
 		host, owner, repo := parseGitHubRepo(workspace.Repo)
+
+		// Override with explicit GitHubIssues.Repo if set (fork workflow)
+		if ts.Spec.When.GitHubIssues != nil && ts.Spec.When.GitHubIssues.Repo != "" {
+			host, owner, repo = parseGitHubRepo(ts.Spec.When.GitHubIssues.Repo)
+		}
+
 		args = append(args,
 			"--github-owner="+owner,
 			"--github-repo="+repo,
