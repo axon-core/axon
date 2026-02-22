@@ -176,9 +176,10 @@ This spawner polls for PRs labeled `ok-to-test` and creates a task for each one 
 - Post a structured review comment on the PR
 
 The reviewer automatically re-reviews PRs when new commits are pushed.
-After the review Task's TTL expires, the spawner rediscovers the PR and
-spawns a new review. The agent skips posting if there are no new commits
-since its last review, so only meaningful updates trigger new feedback.
+The Task's TTL is set to zero so it is deleted as soon as the review
+finishes, letting the spawner rediscover the PR on the next poll cycle.
+The agent skips posting if there are no new commits since its last
+review, so only meaningful updates trigger new feedback.
 
 The reviewer is read-only — it does not push code or modify files.
 

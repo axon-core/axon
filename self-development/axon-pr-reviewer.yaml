@@ -15,7 +15,7 @@ spec:
       name: axon-agent
     model: opus
     type: claude-code
-    ttlSecondsAfterFinished: 3600
+    ttlSecondsAfterFinished: 0
     credentials:
       type: oauth
       secretRef:
