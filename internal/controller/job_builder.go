@@ -27,6 +27,9 @@ const (
 	// OpenCodeImage is the default image for OpenCode agent.
 	OpenCodeImage = "gjkim42/opencode:latest"
 
+	// CursorImage is the default image for Cursor CLI agent.
+	CursorImage = "gjkim42/cursor:latest"
+
 	// AgentTypeClaudeCode is the agent type for Claude Code.
 	AgentTypeClaudeCode = "claude-code"
 
@@ -38,6 +41,9 @@ const (
 
 	// AgentTypeOpenCode is the agent type for OpenCode.
 	AgentTypeOpenCode = "opencode"
+
+	// AgentTypeCursor is the agent type for Cursor CLI.
+	AgentTypeCursor = "cursor"
 
 	// GitCloneImage is the image used for cloning git repositories.
 	GitCloneImage = "alpine/git:v2.47.2"
@@ -74,6 +80,8 @@ type JobBuilder struct {
 	GeminiImagePullPolicy     corev1.PullPolicy
 	OpenCodeImage             string
 	OpenCodeImagePullPolicy   corev1.PullPolicy
+	CursorImage               string
+	CursorImagePullPolicy     corev1.PullPolicy
 }
 
 // NewJobBuilder creates a new JobBuilder.
@@ -83,6 +91,7 @@ func NewJobBuilder() *JobBuilder {
 		CodexImage:      CodexImage,
 		GeminiImage:     GeminiImage,
 		OpenCodeImage:   OpenCodeImage,
+		CursorImage:     CursorImage,
 	}
 }
 
@@ -98,6 +107,8 @@ func (b *JobBuilder) Build(task *axonv1alpha1.Task, workspace *axonv1alpha1.Work
 		return b.buildAgentJob(task, workspace, agentConfig, b.GeminiImage, b.GeminiImagePullPolicy, prompt)
 	case AgentTypeOpenCode:
 		return b.buildAgentJob(task, workspace, agentConfig, b.OpenCodeImage, b.OpenCodeImagePullPolicy, prompt)
+	case AgentTypeCursor:
+		return b.buildAgentJob(task, workspace, agentConfig, b.CursorImage, b.CursorImagePullPolicy, prompt)
 	default:
 		return nil, fmt.Errorf("unsupported agent type: %s", task.Spec.Type)
 	}
@@ -119,6 +130,8 @@ func apiKeyEnvVar(agentType string) string {
 		// OPENCODE_API_KEY is the environment variable that the opencode
 		// entrypoint reads for API key authentication.
 		return "OPENCODE_API_KEY"
+	case AgentTypeCursor:
+		return "CURSOR_API_KEY"
 	default:
 		return "ANTHROPIC_API_KEY"
 	}
@@ -134,6 +147,8 @@ func oauthEnvVar(agentType string) string {
 		return "GEMINI_API_KEY"
 	case AgentTypeOpenCode:
 		return "OPENCODE_API_KEY"
+	case AgentTypeCursor:
+		return "CURSOR_API_KEY"
 	default:
 		return "CLAUDE_CODE_OAUTH_TOKEN"
 	}

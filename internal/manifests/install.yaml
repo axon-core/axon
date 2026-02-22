@@ -259,6 +259,7 @@ spec:
             - --codex-image=gjkim42/codex:latest
             - --gemini-image=gjkim42/gemini:latest
             - --opencode-image=gjkim42/opencode:latest
+            - --cursor-image=gjkim42/cursor:latest
             - --spawner-image=gjkim42/axon-spawner:latest
             - --token-refresher-image=gjkim42/axon-token-refresher:latest
           securityContext:
