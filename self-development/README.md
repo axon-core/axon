@@ -173,13 +173,14 @@ This spawner polls for PRs labeled `ok-to-test` and creates a task for each one 
 - Check if the PR head has changed since the last axon review
 - Read the full PR diff and understand the changes
 - Review for correctness, test coverage, style, security, and simplicity
-- Post a structured review comment on the PR
+- Post a structured comment on the PR
 
 The reviewer automatically re-reviews PRs when new commits are pushed.
 The Task's TTL is set to zero so it is deleted as soon as the review
 finishes, letting the spawner rediscover the PR on the next poll cycle.
-The agent compares the PR head SHA against the last reviewed commit
-and skips posting if they match, so only new pushes trigger feedback.
+The agent compares the PR head SHA against the reviewed commit SHA
+embedded in prior comments and skips if they match, so only new pushes
+trigger a new review.
 
 The reviewer is read-only — it does not push code or modify files.
 

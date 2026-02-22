@@ -47,18 +47,17 @@ spec:
       Before doing anything, check whether the PR head has changed since the
       last axon review. Run:
         ```
-        REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
         HEAD_SHA=$(gh pr view {{.Number}} --json headRefOid -q .headRefOid)
-        LAST_REVIEWED_SHA=$(gh api "repos/${REPO}/pulls/{{.Number}}/reviews" \
-          --jq '[.[] | select(.user.login == "axon-agent" or (.body | test("Axon PR Reviewer"))) | .commit_id] | last // empty')
-        if [ -n "$LAST_REVIEWED_SHA" ] && [ "$HEAD_SHA" = "$LAST_REVIEWED_SHA" ]; then
+        LAST_REVIEWED=$(gh pr view {{.Number}} --json comments \
+          --jq '[.comments[] | select(.body | test("Axon PR Reviewer")) | .body | capture("Reviewed commit:.* (?<sha>[0-9a-f]{7,40})") | .sha] | last // empty')
+        if [ -n "$LAST_REVIEWED" ] && [ "$HEAD_SHA" = "$LAST_REVIEWED" ]; then
           echo "Already reviewed commit $HEAD_SHA. Skipping."
           exit 0
         fi
-        echo "Reviewing commit $HEAD_SHA (last reviewed: ${LAST_REVIEWED_SHA:-none})"
+        echo "Reviewing commit $HEAD_SHA (last reviewed: ${LAST_REVIEWED:-none})"
         ```
-      If the PR head SHA matches the last reviewed commit, exit immediately
-      without posting a review. Otherwise, proceed with the review.
+      If the output says "Skipping", stop immediately without posting a review.
+      Otherwise, proceed with the review.
 
       ### 2. Read the full diff
       Fetch the PR diff and understand all changes:
@@ -81,9 +80,9 @@ spec:
         - **Simplicity**: Is the change minimal and focused, or does it include unnecessary refactoring?
 
       ### 5. Post your review
-      Post a single review comment on the PR using `gh`:
+      Post a single comment on the PR using `gh`:
         ```
-        gh pr review {{.Number}} --comment --body "..."
+        gh pr comment {{.Number}} --body "..."
         ```
 
       Format the comment as:
@@ -91,7 +90,7 @@ spec:
       ```
       🤖 **Axon PR Reviewer**
 
-      **Reviewed commit:** <HEAD_SHA>
+      **Reviewed commit:** <full HEAD_SHA>
 
       ## Summary
       <1-3 sentence summary of what the PR does>
@@ -110,8 +109,8 @@ spec:
       ## Constraints
       - Do NOT push code, create commits, or modify any files. This is a read-only review.
       - Do NOT approve or request changes via GitHub's formal review mechanism.
-        Use `--comment` only.
+        Post comments only via `gh pr comment`.
       - Be constructive and specific. Avoid vague feedback.
       - Focus on substantive issues, not style nitpicks that a linter would catch.
-      - Always include the reviewed commit SHA in the review comment header.
+      - Always include the full reviewed commit SHA in the review comment header.
   pollInterval: 1m
