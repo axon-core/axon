@@ -10,12 +10,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	axonv1alpha1 "github.com/axon-core/axon/api/v1alpha1"
 	"github.com/axon-core/axon/internal/controller"
 	"github.com/axon-core/axon/internal/githubapp"
+	"github.com/axon-core/axon/internal/telemetry"
 )
 
 var (
@@ -44,6 +46,8 @@ func main() {
 	var spawnerImagePullPolicy string
 	var tokenRefresherImage string
 	var tokenRefresherImagePullPolicy string
+	var telemetryReport bool
+	var telemetryEndpoint string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -62,6 +66,8 @@ func main() {
 	flag.StringVar(&spawnerImagePullPolicy, "spawner-image-pull-policy", "", "The image pull policy for spawner Deployments (e.g., Always, Never, IfNotPresent).")
 	flag.StringVar(&tokenRefresherImage, "token-refresher-image", controller.DefaultTokenRefresherImage, "The image to use for the token refresher sidecar.")
 	flag.StringVar(&tokenRefresherImagePullPolicy, "token-refresher-image-pull-policy", "", "The image pull policy for the token refresher sidecar (e.g., Always, Never, IfNotPresent).")
+	flag.BoolVar(&telemetryReport, "telemetry-report", false, "Run a one-shot telemetry report and exit.")
+	flag.StringVar(&telemetryEndpoint, "telemetry-endpoint", "https://telemetry.axon.dev/v1/report", "The endpoint to send telemetry reports to.")
 
 	opts := zap.Options{
 		Development: true,
@@ -70,6 +76,25 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if telemetryReport {
+		cfg := ctrl.GetConfigOrDie()
+		c, err := client.New(cfg, client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "Unable to create client for telemetry")
+			os.Exit(1)
+		}
+		clientset, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			setupLog.Error(err, "Unable to create clientset for telemetry")
+			os.Exit(1)
+		}
+		if err := telemetry.Run(ctrl.SetupSignalHandler(), c, clientset, telemetryEndpoint); err != nil {
+			setupLog.Error(err, "Telemetry report failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

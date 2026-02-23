@@ -292,3 +292,41 @@ spec:
             requests:
               cpu: 10m
               memory: 64Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: axon-telemetry
+  namespace: axon-system
+  labels:
+    app.kubernetes.io/name: axon
+    app.kubernetes.io/component: telemetry
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Replace
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          serviceAccountName: axon-controller
+          restartPolicy: OnFailure
+          containers:
+            - name: telemetry
+              image: gjkim42/axon-controller:latest
+              args:
+                - --telemetry-report
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              resources:
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
