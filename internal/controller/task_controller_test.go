@@ -203,7 +203,7 @@ func TestResolveMCPServerSecrets_HeadersFrom(t *testing.T) {
 			Headers: map[string]string{
 				"X-Static": "static-value",
 			},
-			HeadersFrom: &axonv1alpha1.SecretReference{Name: "mcp-headers"},
+			HeadersFrom: &axonv1alpha1.SecretValuesSource{SecretRef: axonv1alpha1.SecretReference{Name: "mcp-headers"}},
 		},
 	}
 
@@ -252,7 +252,7 @@ func TestResolveMCPServerSecrets_HeadersFromPrecedence(t *testing.T) {
 			Headers: map[string]string{
 				"Authorization": "Bearer inline-token",
 			},
-			HeadersFrom: &axonv1alpha1.SecretReference{Name: "mcp-headers"},
+			HeadersFrom: &axonv1alpha1.SecretValuesSource{SecretRef: axonv1alpha1.SecretReference{Name: "mcp-headers"}},
 		},
 	}
 
@@ -289,7 +289,7 @@ func TestResolveMCPServerSecrets_EnvFrom(t *testing.T) {
 			Env: map[string]string{
 				"DSN": "postgres://localhost/db",
 			},
-			EnvFrom: &axonv1alpha1.SecretReference{Name: "mcp-env"},
+			EnvFrom: &axonv1alpha1.SecretValuesSource{SecretRef: axonv1alpha1.SecretReference{Name: "mcp-env"}},
 		},
 	}
 
@@ -318,7 +318,7 @@ func TestResolveMCPServerSecrets_MissingSecret(t *testing.T) {
 			Name:        "api",
 			Type:        "http",
 			URL:         "https://api.example.com/mcp/",
-			HeadersFrom: &axonv1alpha1.SecretReference{Name: "nonexistent"},
+			HeadersFrom: &axonv1alpha1.SecretValuesSource{SecretRef: axonv1alpha1.SecretReference{Name: "nonexistent"}},
 		},
 	}
 

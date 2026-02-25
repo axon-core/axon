@@ -423,9 +423,9 @@ func (r *TaskReconciler) resolveMCPServerSecrets(ctx context.Context, namespace 
 			var secret corev1.Secret
 			if err := r.Get(ctx, client.ObjectKey{
 				Namespace: namespace,
-				Name:      s.HeadersFrom.Name,
+				Name:      s.HeadersFrom.SecretRef.Name,
 			}, &secret); err != nil {
-				return nil, fmt.Errorf("fetching headersFrom secret %q for MCP server %q: %w", s.HeadersFrom.Name, s.Name, err)
+				return nil, fmt.Errorf("fetching headersFrom secret %q for MCP server %q: %w", s.HeadersFrom.SecretRef.Name, s.Name, err)
 			}
 			merged := make(map[string]string, len(s.Headers)+len(secret.Data))
 			for k, v := range s.Headers {
@@ -442,9 +442,9 @@ func (r *TaskReconciler) resolveMCPServerSecrets(ctx context.Context, namespace 
 			var secret corev1.Secret
 			if err := r.Get(ctx, client.ObjectKey{
 				Namespace: namespace,
-				Name:      s.EnvFrom.Name,
+				Name:      s.EnvFrom.SecretRef.Name,
 			}, &secret); err != nil {
-				return nil, fmt.Errorf("fetching envFrom secret %q for MCP server %q: %w", s.EnvFrom.Name, s.Name, err)
+				return nil, fmt.Errorf("fetching envFrom secret %q for MCP server %q: %w", s.EnvFrom.SecretRef.Name, s.Name, err)
 			}
 			merged := make(map[string]string, len(s.Env)+len(secret.Data))
 			for k, v := range s.Env {

@@ -79,11 +79,18 @@ spec:
                         type is "stdio". Values from EnvFrom take precedence over inline Env
                         for overlapping keys.
                       properties:
-                        name:
-                          description: Name is the name of the secret.
-                          type: string
+                        secretRef:
+                          description: SecretRef references the Secret to read data
+                            from.
+                          properties:
+                            name:
+                              description: Name is the name of the secret.
+                              type: string
+                          required:
+                          - name
+                          type: object
                       required:
-                      - name
+                      - secretRef
                       type: object
                     headers:
                       additionalProperties:
@@ -99,11 +106,18 @@ spec:
                         Values from HeadersFrom take precedence over inline Headers for
                         overlapping keys.
                       properties:
-                        name:
-                          description: Name is the name of the secret.
-                          type: string
+                        secretRef:
+                          description: SecretRef references the Secret to read data
+                            from.
+                          properties:
+                            name:
+                              description: Name is the name of the secret.
+                              type: string
+                          required:
+                          - name
+                          type: object
                       required:
-                      - name
+                      - secretRef
                       type: object
                     name:
                       description: |-

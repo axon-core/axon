@@ -93,7 +93,7 @@ type MCPServerSpec struct {
 	// Values from HeadersFrom take precedence over inline Headers for
 	// overlapping keys.
 	// +optional
-	HeadersFrom *SecretReference `json:"headersFrom,omitempty"`
+	HeadersFrom *SecretValuesSource `json:"headersFrom,omitempty"`
 
 	// Env are environment variables for the server process.
 	// Only used when type is "stdio".
@@ -105,7 +105,13 @@ type MCPServerSpec struct {
 	// type is "stdio". Values from EnvFrom take precedence over inline Env
 	// for overlapping keys.
 	// +optional
-	EnvFrom *SecretReference `json:"envFrom,omitempty"`
+	EnvFrom *SecretValuesSource `json:"envFrom,omitempty"`
+}
+
+// SecretValuesSource selects a Secret to populate values from.
+type SecretValuesSource struct {
+	// SecretRef references the Secret to read data from.
+	SecretRef SecretReference `json:"secretRef"`
 }
 
 // AgentConfigReference refers to an AgentConfig resource by name.
