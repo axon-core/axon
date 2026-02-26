@@ -9,6 +9,11 @@ spec:
         - actor/axon
       excludeLabels:
         - axon/needs-input
+      priorityLabels:
+        - priority/critical-urgent
+        - priority/imporant-soon
+        - priority/import-longterm
+        - priority/backlog
   maxConcurrency: 3
   taskTemplate:
     workspaceRef:

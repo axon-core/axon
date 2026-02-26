@@ -93,6 +93,14 @@ type GitHubIssues struct {
 	// command wins.
 	// +optional
 	ExcludeComments []string `json:"excludeComments,omitempty"`
+
+	// PriorityLabels defines a label-based priority order for discovered items.
+	// When maxConcurrency limits how many tasks are created per cycle,
+	// items are sorted by the first matching label before task creation.
+	// Index 0 is the highest priority. Items without a matching label
+	// are scheduled last. When empty, items are processed in discovery order.
+	// +optional
+	PriorityLabels []string `json:"priorityLabels,omitempty"`
 }
 
 // Jira discovers issues from a Jira project.

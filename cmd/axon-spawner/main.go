@@ -190,6 +190,11 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		}
 	}
 
+	// Sort new items by priority labels when configured
+	if ts.Spec.When.GitHubIssues != nil && len(ts.Spec.When.GitHubIssues.PriorityLabels) > 0 {
+		source.SortByLabelPriority(newItems, ts.Spec.When.GitHubIssues.PriorityLabels)
+	}
+
 	maxConcurrency := int32(0)
 	if ts.Spec.MaxConcurrency != nil {
 		maxConcurrency = *ts.Spec.MaxConcurrency
@@ -352,6 +357,7 @@ func buildSource(ts *axonv1alpha1.TaskSpawner, owner, repo, apiBaseURL, tokenFil
 			BaseURL:         apiBaseURL,
 			TriggerComment:  gh.TriggerComment,
 			ExcludeComments: gh.ExcludeComments,
+			PriorityLabels:  gh.PriorityLabels,
 		}, nil
 	}
 

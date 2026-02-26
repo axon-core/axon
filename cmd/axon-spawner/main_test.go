@@ -860,6 +860,118 @@ func TestRunCycleWithSource_NotSuspendedConditionCleared(t *testing.T) {
 	}
 }
 
+func TestRunCycleWithSource_PriorityLabelsOrderCreation(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", int32Ptr(2))
+	ts.Spec.When.GitHubIssues.PriorityLabels = []string{
+		"priority/critical-urgent",
+		"priority/imporant-soon",
+		"priority/backlog",
+	}
+	cl, key := setupTest(t, ts)
+
+	// Items arrive in reverse priority order (simulating GitHub API default sort)
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "3", Title: "Backlog item", Labels: []string{"priority/backlog"}},
+			{ID: "2", Title: "Important item", Labels: []string{"priority/imporant-soon"}},
+			{ID: "1", Title: "Critical item", Labels: []string{"priority/critical-urgent"}},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// With maxConcurrency=2, only 2 tasks should be created
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Fatalf("Expected 2 tasks, got %d", len(taskList.Items))
+	}
+
+	// The critical and important items should be created (not backlog)
+	created := make(map[string]bool)
+	for _, task := range taskList.Items {
+		created[task.Name] = true
+	}
+	if !created["spawner-1"] {
+		t.Error("Expected critical-urgent task (spawner-1) to be created")
+	}
+	if !created["spawner-2"] {
+		t.Error("Expected imporant-soon task (spawner-2) to be created")
+	}
+	if created["spawner-3"] {
+		t.Error("Backlog task (spawner-3) should NOT have been created")
+	}
+}
+
+func TestRunCycleWithSource_PriorityLabelsNotConfigured(t *testing.T) {
+	// When priorityLabels is not configured, items should be processed in discovery order
+	ts := newTaskSpawner("spawner", "default", int32Ptr(2))
+	cl, key := setupTest(t, ts)
+
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "3", Title: "Backlog item", Labels: []string{"priority/backlog"}},
+			{ID: "2", Title: "Important item", Labels: []string{"priority/imporant-soon"}},
+			{ID: "1", Title: "Critical item", Labels: []string{"priority/critical-urgent"}},
+		},
+	}
+
+	if err := runCycleWithSource(context.Background(), cl, key, src); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	var taskList axonv1alpha1.TaskList
+	if err := cl.List(context.Background(), &taskList, client.InNamespace("default")); err != nil {
+		t.Fatalf("Listing tasks: %v", err)
+	}
+	if len(taskList.Items) != 2 {
+		t.Fatalf("Expected 2 tasks, got %d", len(taskList.Items))
+	}
+
+	// Without priority labels, tasks should be created in discovery order (ID 3, 2)
+	created := make(map[string]bool)
+	for _, task := range taskList.Items {
+		created[task.Name] = true
+	}
+	if !created["spawner-3"] {
+		t.Error("Expected spawner-3 to be created (discovery order)")
+	}
+	if !created["spawner-2"] {
+		t.Error("Expected spawner-2 to be created (discovery order)")
+	}
+}
+
+func TestBuildSource_PriorityLabelsPassedToSource(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.When.GitHubIssues.PriorityLabels = []string{
+		"priority/critical-urgent",
+		"priority/imporant-soon",
+	}
+
+	src, err := buildSource(ts, "owner", "repo", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ghSrc, ok := src.(*source.GitHubSource)
+	if !ok {
+		t.Fatalf("Expected *source.GitHubSource, got %T", src)
+	}
+	if len(ghSrc.PriorityLabels) != 2 {
+		t.Fatalf("Expected 2 priority labels, got %d", len(ghSrc.PriorityLabels))
+	}
+	if ghSrc.PriorityLabels[0] != "priority/critical-urgent" {
+		t.Errorf("PriorityLabels[0] = %q, want %q", ghSrc.PriorityLabels[0], "priority/critical-urgent")
+	}
+	if ghSrc.PriorityLabels[1] != "priority/imporant-soon" {
+		t.Errorf("PriorityLabels[1] = %q, want %q", ghSrc.PriorityLabels[1], "priority/imporant-soon")
+	}
+}
+
 func TestRunCycleWithSource_CommentFieldsPassedToSource(t *testing.T) {
 	ts := newTaskSpawner("spawner", "default", nil)
 	ts.Spec.When.GitHubIssues = &axonv1alpha1.GitHubIssues{
