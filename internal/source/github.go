@@ -36,6 +36,7 @@ type GitHubSource struct {
 	Client          *http.Client
 	TriggerComment  string
 	ExcludeComments []string
+	PriorityLabels  []string
 }
 
 type githubIssue struct {
