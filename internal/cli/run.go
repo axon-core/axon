@@ -305,7 +305,7 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.MarkFlagRequired("prompt")
 
 	_ = cmd.RegisterFlagCompletionFunc("credential-type", cobra.FixedCompletions([]string{"api-key", "oauth"}, cobra.ShellCompDirectiveNoFileComp))
-	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex", "gemini", "opencode"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{"claude-code", "codex", "gemini", "opencode", "cursor"}, cobra.ShellCompDirectiveNoFileComp))
 
 	return cmd
 }
@@ -341,6 +341,8 @@ func apiKeySecretKey(agentType string) string {
 		return "GEMINI_API_KEY"
 	case "opencode":
 		return "OPENCODE_API_KEY"
+	case "cursor":
+		return "CURSOR_API_KEY"
 	default:
 		return "ANTHROPIC_API_KEY"
 	}
@@ -356,6 +358,8 @@ func oauthSecretKey(agentType string) string {
 		return "GEMINI_API_KEY"
 	case "opencode":
 		return "OPENCODE_API_KEY"
+	case "cursor":
+		return "CURSOR_API_KEY"
 	default:
 		return "CLAUDE_CODE_OAUTH_TOKEN"
 	}

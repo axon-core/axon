@@ -1339,6 +1339,231 @@ func TestBuildOpenCodeJob_OAuthCredentials(t *testing.T) {
 	}
 }
 
+func TestBuildCursorJob_DefaultImage(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cursor",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCursor,
+			Prompt: "Fix the bug",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "cursor-secret"},
+			},
+			Model: "claude-sonnet-4-20250514",
+		},
+	}
+
+	job, err := builder.Build(task, nil, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	if container.Image != CursorImage {
+		t.Errorf("Expected image %q, got %q", CursorImage, container.Image)
+	}
+
+	if container.Name != AgentTypeCursor {
+		t.Errorf("Expected container name %q, got %q", AgentTypeCursor, container.Name)
+	}
+
+	if len(container.Command) != 1 || container.Command[0] != "/axon_entrypoint.sh" {
+		t.Errorf("Expected command [/axon_entrypoint.sh], got %v", container.Command)
+	}
+
+	if len(container.Args) != 1 || container.Args[0] != "Fix the bug" {
+		t.Errorf("Expected args [Fix the bug], got %v", container.Args)
+	}
+
+	foundAxonModel := false
+	foundCursorKey := false
+	for _, env := range container.Env {
+		if env.Name == "AXON_MODEL" {
+			foundAxonModel = true
+			if env.Value != "claude-sonnet-4-20250514" {
+				t.Errorf("AXON_MODEL value: expected %q, got %q", "claude-sonnet-4-20250514", env.Value)
+			}
+		}
+		if env.Name == "CURSOR_API_KEY" {
+			foundCursorKey = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Error("Expected CURSOR_API_KEY to reference a secret")
+			} else {
+				if env.ValueFrom.SecretKeyRef.Name != "cursor-secret" {
+					t.Errorf("Expected secret name %q, got %q", "cursor-secret", env.ValueFrom.SecretKeyRef.Name)
+				}
+				if env.ValueFrom.SecretKeyRef.Key != "CURSOR_API_KEY" {
+					t.Errorf("Expected secret key %q, got %q", "CURSOR_API_KEY", env.ValueFrom.SecretKeyRef.Key)
+				}
+			}
+		}
+		if env.Name == "ANTHROPIC_API_KEY" {
+			t.Error("ANTHROPIC_API_KEY should not be set for cursor agent type")
+		}
+		if env.Name == "CODEX_API_KEY" {
+			t.Error("CODEX_API_KEY should not be set for cursor agent type")
+		}
+	}
+	if !foundAxonModel {
+		t.Error("Expected AXON_MODEL env var to be set")
+	}
+	if !foundCursorKey {
+		t.Error("Expected CURSOR_API_KEY env var to be set")
+	}
+}
+
+func TestBuildCursorJob_CustomImage(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cursor-custom",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCursor,
+			Prompt: "Refactor the module",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "cursor-secret"},
+			},
+			Image: "my-cursor:v2",
+		},
+	}
+
+	job, err := builder.Build(task, nil, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	if container.Image != "my-cursor:v2" {
+		t.Errorf("Expected image %q, got %q", "my-cursor:v2", container.Image)
+	}
+
+	if len(container.Command) != 1 || container.Command[0] != "/axon_entrypoint.sh" {
+		t.Errorf("Expected command [/axon_entrypoint.sh], got %v", container.Command)
+	}
+}
+
+func TestBuildCursorJob_OAuthCredentials(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cursor-oauth",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCursor,
+			Prompt: "Review the code",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeOAuth,
+				SecretRef: axonv1alpha1.SecretReference{Name: "cursor-oauth"},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+
+	foundCursorKey := false
+	for _, env := range container.Env {
+		if env.Name == "CURSOR_API_KEY" {
+			foundCursorKey = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Error("Expected CURSOR_API_KEY to reference a secret")
+			} else {
+				if env.ValueFrom.SecretKeyRef.Name != "cursor-oauth" {
+					t.Errorf("Expected secret name %q, got %q", "cursor-oauth", env.ValueFrom.SecretKeyRef.Name)
+				}
+				if env.ValueFrom.SecretKeyRef.Key != "CURSOR_API_KEY" {
+					t.Errorf("Expected secret key %q, got %q", "CURSOR_API_KEY", env.ValueFrom.SecretKeyRef.Key)
+				}
+			}
+		}
+		if env.Name == "CLAUDE_CODE_OAUTH_TOKEN" {
+			t.Error("CLAUDE_CODE_OAUTH_TOKEN should not be set for cursor agent type")
+		}
+	}
+	if !foundCursorKey {
+		t.Error("Expected CURSOR_API_KEY env var to be set")
+	}
+}
+
+func TestBuildJob_AgentConfigCursor(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &axonv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cursor-agentconfig",
+			Namespace: "default",
+		},
+		Spec: axonv1alpha1.TaskSpec{
+			Type:   AgentTypeCursor,
+			Prompt: "Fix issue",
+			Credentials: axonv1alpha1.Credentials{
+				Type:      axonv1alpha1.CredentialTypeAPIKey,
+				SecretRef: axonv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	agentConfig := &axonv1alpha1.AgentConfigSpec{
+		AgentsMD: "Follow coding standards.",
+		Plugins: []axonv1alpha1.PluginSpec{
+			{
+				Name: "dev-tools",
+				Skills: []axonv1alpha1.SkillDefinition{
+					{Name: "test", Content: "Run unit tests first"},
+				},
+				Agents: []axonv1alpha1.AgentDefinition{
+					{Name: "linter", Content: "You are a code linter"},
+				},
+			},
+		},
+	}
+
+	job, err := builder.Build(task, nil, agentConfig, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	envMap := map[string]string{}
+	for _, env := range container.Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	if envMap["AXON_AGENTS_MD"] != "Follow coding standards." {
+		t.Errorf("Expected AXON_AGENTS_MD=%q, got %q", "Follow coding standards.", envMap["AXON_AGENTS_MD"])
+	}
+
+	if envMap["AXON_PLUGIN_DIR"] != PluginMountPath {
+		t.Errorf("Expected AXON_PLUGIN_DIR=%q, got %q", PluginMountPath, envMap["AXON_PLUGIN_DIR"])
+	}
+
+	if len(job.Spec.Template.Spec.Volumes) != 1 {
+		t.Errorf("Expected 1 volume, got %d", len(job.Spec.Template.Spec.Volumes))
+	}
+	if len(job.Spec.Template.Spec.InitContainers) != 1 {
+		t.Errorf("Expected 1 init container, got %d", len(job.Spec.Template.Spec.InitContainers))
+	}
+
+	if container.Name != AgentTypeCursor {
+		t.Errorf("Expected container name %q, got %q", AgentTypeCursor, container.Name)
+	}
+}
+
 func TestBuildClaudeCodeJob_UnsupportedType(t *testing.T) {
 	builder := NewJobBuilder()
 	task := &axonv1alpha1.Task{

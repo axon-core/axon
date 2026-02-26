@@ -19,7 +19,7 @@
 
 Point Axon at a GitHub issue and get a PR back — fully autonomous, running in Kubernetes. Each agent runs in an isolated, ephemeral Pod with a freshly cloned git workspace. Fan out across repositories, chain tasks into pipelines, and react to events automatically.
 
-Supports **Claude Code**, **OpenAI Codex**, **Google Gemini**, **OpenCode**, and [custom agent images](docs/agent-image-interface.md).
+Supports **Claude Code**, **OpenAI Codex**, **Google Gemini**, **OpenCode**, **Cursor**, and [custom agent images](docs/agent-image-interface.md).
 
 ## Demo
 
@@ -47,7 +47,7 @@ AI coding agents are evolving from interactive CLI tools into autonomous backgro
 
 - **Orchestration, not just execution** — Don't just run an agent; manage its entire lifecycle. Chain tasks with `dependsOn` and pass results (branch names, PR URLs, token usage) between pipeline stages. Use `TaskSpawner` to build event-driven workers that react to GitHub issues, PRs, or schedules.
 - **Host-isolated autonomy** — Each task runs in an isolated, ephemeral Pod with a freshly cloned git workspace. Agents have no access to your host machine — use [scoped tokens and branch protection](#security-considerations) to control repository access.
-- **Standardized interface** — Plug in any agent (Claude, Codex, Gemini, OpenCode, or your own) using a simple [container interface](docs/agent-image-interface.md). Axon handles credential injection, workspace management, and Kubernetes plumbing.
+- **Standardized interface** — Plug in any agent (Claude, Codex, Gemini, OpenCode, Cursor, or your own) using a simple [container interface](docs/agent-image-interface.md). Axon handles credential injection, workspace management, and Kubernetes plumbing.
 - **Scalable parallelism** — Fan out agents across multiple repositories. Kubernetes handles scheduling, resource management, and queueing — scale is limited by your cluster capacity and API provider quotas.
 - **Observable & CI-native** — Every agent run is a first-class Kubernetes resource with deterministic outputs (branch names, PR URLs, commit SHAs, token usage) captured into status. Monitor via `kubectl`, manage via the `axon` CLI or declarative YAML (GitOps-ready), and integrate with ArgoCD or GitHub Actions.
 
@@ -534,7 +534,7 @@ axon resume taskspawner my-spawner
 <details>
 <summary><strong>What agents does Axon support?</strong></summary>
 
-Axon supports **Claude Code**, **OpenAI Codex**, **Google Gemini**, and **OpenCode** out of the box. You can also bring your own agent image using the [container interface](docs/agent-image-interface.md).
+Axon supports **Claude Code**, **OpenAI Codex**, **Google Gemini**, **OpenCode**, and **Cursor** out of the box. You can also bring your own agent image using the [container interface](docs/agent-image-interface.md).
 
 </details>
 
