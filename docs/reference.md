@@ -47,8 +47,44 @@ If template rendering fails (e.g., missing key), the raw prompt string is used a
 |-------|-------------|----------|
 | `spec.repo` | Git repository URL to clone (HTTPS, git://, or SSH) | Yes |
 | `spec.ref` | Branch, tag, or commit SHA to checkout (defaults to repo's default branch) | No |
-| `spec.secretRef.name` | Secret containing `GITHUB_TOKEN` for git auth and `gh` CLI | No |
+| `spec.secretRef.name` | Secret containing credentials for git auth and `gh` CLI (see [authentication methods](#workspace-authentication) below) | No |
 | `spec.files[]` | Files to inject into the cloned repository before the agent starts | No |
+
+### Workspace Authentication
+
+The workspace secret referenced by `spec.secretRef.name` supports two authentication methods:
+
+**Personal Access Token (PAT):**
+
+The secret contains a single key:
+
+| Key | Description |
+|-----|-------------|
+| `GITHUB_TOKEN` | GitHub Personal Access Token for git auth and `gh` CLI |
+
+```bash
+kubectl create secret generic github-token \
+  --from-literal=GITHUB_TOKEN=<your-pat>
+```
+
+**GitHub App (recommended for production/org use):**
+
+The secret contains three keys, and the controller automatically exchanges them for a short-lived installation token before each task run:
+
+| Key | Description |
+|-----|-------------|
+| `appID` | GitHub App ID |
+| `installationID` | GitHub App installation ID for the target organization |
+| `privateKey` | PEM-encoded RSA private key (PKCS1 or PKCS8) |
+
+```bash
+kubectl create secret generic github-app-creds \
+  --from-literal=appID=12345 \
+  --from-literal=installationID=67890 \
+  --from-file=privateKey=my-app.private-key.pem
+```
+
+GitHub Apps are preferred over PATs for production use because they offer fine-grained permissions, higher rate limits, no dependency on a specific user account, and automatically expiring tokens.
 
 ## AgentConfig
 
@@ -173,7 +209,7 @@ workspace:
   name: my-workspace
 ```
 
-**Specify inline — Kelos auto-creates the Workspace resource and secret:**
+**Specify inline with a PAT — Kelos auto-creates the Workspace resource and secret:**
 
 ```yaml
 workspace:
@@ -182,14 +218,29 @@ workspace:
   token: <your-github-token>  # optional, for private repos and gh CLI
 ```
 
+**Specify inline with a GitHub App (recommended for production/org use):**
+
+```yaml
+workspace:
+  repo: https://github.com/your-org/repo.git
+  ref: main
+  githubApp:
+    appID: "12345"
+    installationID: "67890"
+    privateKeyPath: ~/.config/my-app.private-key.pem
+```
+
 | Field | Description |
 |-------|-------------|
 | `workspace.name` | Name of an existing Workspace resource |
 | `workspace.repo` | Git repository URL — Kelos auto-creates a Workspace resource |
 | `workspace.ref` | Git reference (branch, tag, or commit SHA) |
-| `workspace.token` | GitHub token — Kelos auto-creates the secret and injects `GITHUB_TOKEN` |
+| `workspace.token` | GitHub PAT — Kelos auto-creates the secret and injects `GITHUB_TOKEN` |
+| `workspace.githubApp.appID` | GitHub App ID |
+| `workspace.githubApp.installationID` | GitHub App installation ID |
+| `workspace.githubApp.privateKeyPath` | Path to PEM-encoded RSA private key file |
 
-If both `name` and `repo` are set, `name` takes precedence. The `--workspace` CLI flag overrides all config values.
+The `token` and `githubApp` fields are mutually exclusive. If both `name` and `repo` are set, `name` takes precedence. The `--workspace` CLI flag overrides all config values.
 
 ### Other Settings
 

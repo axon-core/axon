@@ -63,7 +63,14 @@ spec:
   ref: main
   secretRef:
     name: github-token  # For pushing branches and creating PRs
-  # or authenticate with githubApp
+  # Or use GitHub App authentication (recommended for production/org use):
+  # secretRef:
+  #   name: github-app-creds
+  # Create the GitHub App secret with:
+  #   kubectl create secret generic github-app-creds \
+  #     --from-literal=appID=12345 \
+  #     --from-literal=installationID=67890 \
+  #     --from-file=privateKey=my-app.private-key.pem
 ```
 
 ### 2. GitHub Token Secret

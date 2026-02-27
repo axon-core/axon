@@ -8,3 +8,12 @@ spec:
   ref: main
   secretRef:
     name: github-token
+  # Alternative: use a GitHub App secret instead of a PAT (recommended for production)
+  # Create the secret with:
+  #   kubectl create secret generic github-app-creds \
+  #     --from-literal=appID=12345 \
+  #     --from-literal=installationID=67890 \
+  #     --from-file=privateKey=my-app.private-key.pem
+  # Then reference it:
+  #   secretRef:
+  #     name: github-app-creds

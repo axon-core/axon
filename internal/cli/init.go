@@ -36,7 +36,15 @@ oauthToken: ""
 # workspace:
 #   repo: https://github.com/org/repo.git
 #   ref: main
-#   token: ""  # GitHub token for git auth and gh CLI (optional)
+#   token: ""  # GitHub PAT for git auth and gh CLI (optional)
+# Or use GitHub App authentication (recommended for production/org use):
+# workspace:
+#   repo: https://github.com/org/repo.git
+#   ref: main
+#   githubApp:
+#     appID: ""
+#     installationID: ""
+#     privateKeyPath: ""  # path to PEM-encoded RSA private key
 
 # Default AgentConfig resource (optional)
 # agentConfig: my-agent-config

@@ -138,6 +138,19 @@ Or set `apiKey` with an OpenAI API key instead.
 **GitHub token** (for pushing branches and creating PRs):
 Create a [Personal Access Token](https://github.com/settings/tokens) with `repo` scope (and `workflow` if your repo uses GitHub Actions).
 
+**GitHub App** (recommended for production/org use):
+For organizations, [GitHub Apps](https://docs.github.com/en/apps) are preferred over PATs — they offer fine-grained permissions, higher rate limits, and don't depend on a specific user account. Use `githubApp` instead of `token` in your workspace config:
+```yaml
+workspace:
+  repo: https://github.com/your-org/repo.git
+  ref: main
+  githubApp:
+    appID: "12345"
+    installationID: "67890"
+    privateKeyPath: ~/.config/my-app.private-key.pem
+```
+See the [Workspace reference](docs/reference.md#workspace) for details.
+
 </details>
 
 > **Warning:** Without a workspace, the agent runs in an ephemeral pod — any files it creates are lost when the pod terminates. Always set up a workspace to get persistent results.
@@ -448,7 +461,7 @@ The key pattern is `excludeLabels: [kelos/needs-input]` — this creates a feedb
 | Resource | Key Fields | Full Spec |
 |----------|-----------|-----------|
 | **Task** | `type`, `prompt`, `credentials`, `workspaceRef`, `dependsOn`, `branch` | [Reference](docs/reference.md#task) |
-| **Workspace** | `repo`, `ref`, `secretRef`, `files` | [Reference](docs/reference.md#workspace) |
+| **Workspace** | `repo`, `ref`, `secretRef` (PAT or GitHub App), `files` | [Reference](docs/reference.md#workspace) |
 | **AgentConfig** | `agentsMD`, `plugins`, `mcpServers` | [Reference](docs/reference.md#agentconfig) |
 | **TaskSpawner** | `when`, `taskTemplate`, `pollInterval`, `maxConcurrency` | [Reference](docs/reference.md#taskspawner) |
 
