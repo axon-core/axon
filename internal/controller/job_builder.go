@@ -16,16 +16,16 @@ import (
 
 const (
 	// ClaudeCodeImage is the default image for Claude Code agent.
-	ClaudeCodeImage = "gjkim42/claude-code:latest"
+	ClaudeCodeImage = "ghcr.io/kelos-dev/claude-code:latest"
 
 	// CodexImage is the default image for OpenAI Codex agent.
-	CodexImage = "gjkim42/codex:latest"
+	CodexImage = "ghcr.io/kelos-dev/codex:latest"
 
 	// GeminiImage is the default image for Google Gemini CLI agent.
-	GeminiImage = "gjkim42/gemini:latest"
+	GeminiImage = "ghcr.io/kelos-dev/gemini:latest"
 
 	// OpenCodeImage is the default image for OpenCode agent.
-	OpenCodeImage = "gjkim42/opencode:latest"
+	OpenCodeImage = "ghcr.io/kelos-dev/opencode:latest"
 
 	// AgentTypeClaudeCode is the agent type for Claude Code.
 	AgentTypeClaudeCode = "claude-code"
