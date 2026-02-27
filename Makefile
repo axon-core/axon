@@ -1,5 +1,5 @@
 # Image configuration
-REGISTRY ?= gjkim42
+REGISTRY ?= ghcr.io/kelos-dev
 VERSION ?= latest
 IMAGE_DIRS ?= cmd/kelos-controller cmd/kelos-spawner cmd/kelos-token-refresher claude-code codex gemini opencode
 

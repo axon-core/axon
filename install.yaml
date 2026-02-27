@@ -253,15 +253,15 @@ spec:
         runAsNonRoot: true
       containers:
         - name: manager
-          image: gjkim42/kelos-controller:latest
+          image: ghcr.io/kelos-dev/kelos-controller:latest
           args:
             - --leader-elect
-            - --claude-code-image=gjkim42/claude-code:latest
-            - --codex-image=gjkim42/codex:latest
-            - --gemini-image=gjkim42/gemini:latest
-            - --opencode-image=gjkim42/opencode:latest
-            - --spawner-image=gjkim42/kelos-spawner:latest
-            - --token-refresher-image=gjkim42/kelos-token-refresher:latest
+            - --claude-code-image=ghcr.io/kelos-dev/claude-code:latest
+            - --codex-image=ghcr.io/kelos-dev/codex:latest
+            - --gemini-image=ghcr.io/kelos-dev/gemini:latest
+            - --opencode-image=ghcr.io/kelos-dev/opencode:latest
+            - --spawner-image=ghcr.io/kelos-dev/kelos-spawner:latest
+            - --token-refresher-image=ghcr.io/kelos-dev/kelos-token-refresher:latest
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

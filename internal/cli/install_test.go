@@ -213,7 +213,7 @@ func TestUninstallCommand_RejectsExtraArgs(t *testing.T) {
 }
 
 func TestVersionedManifest_Latest(t *testing.T) {
-	data := []byte("image: gjkim42/kelos-controller:latest")
+	data := []byte("image: ghcr.io/kelos-dev/kelos-controller:latest")
 	result := versionedManifest(data, "latest")
 	if !bytes.Equal(result, data) {
 		t.Errorf("expected manifest unchanged for latest version, got %s", string(result))
@@ -221,19 +221,19 @@ func TestVersionedManifest_Latest(t *testing.T) {
 }
 
 func TestVersionedManifest_Tagged(t *testing.T) {
-	data := []byte("image: gjkim42/kelos-controller:latest")
+	data := []byte("image: ghcr.io/kelos-dev/kelos-controller:latest")
 	result := versionedManifest(data, "v0.1.0")
-	expected := []byte("image: gjkim42/kelos-controller:v0.1.0")
+	expected := []byte("image: ghcr.io/kelos-dev/kelos-controller:v0.1.0")
 	if !bytes.Equal(result, expected) {
 		t.Errorf("expected %s, got %s", string(expected), string(result))
 	}
 }
 
 func TestVersionedManifest_MultipleImages(t *testing.T) {
-	data := []byte(`image: gjkim42/kelos-controller:latest
+	data := []byte(`image: ghcr.io/kelos-dev/kelos-controller:latest
 args:
-  - --spawner-image=gjkim42/kelos-spawner:latest
-  - --claude-code-image=gjkim42/claude-code:latest`)
+  - --spawner-image=ghcr.io/kelos-dev/kelos-spawner:latest
+  - --claude-code-image=ghcr.io/kelos-dev/claude-code:latest`)
 	result := versionedManifest(data, "v0.2.0")
 	if bytes.Contains(result, []byte(":latest")) {
 		t.Errorf("expected all :latest tags to be replaced, got %s", string(result))
@@ -256,12 +256,12 @@ func TestVersionedManifest_EmbeddedController(t *testing.T) {
 func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
 	// Verify the embedded manifest contains image flags that will be versioned.
 	expectedArgs := []string{
-		"--claude-code-image=gjkim42/claude-code:",
-		"--codex-image=gjkim42/codex:",
-		"--gemini-image=gjkim42/gemini:",
-		"--opencode-image=gjkim42/opencode:",
-		"--spawner-image=gjkim42/kelos-spawner:",
-		"--token-refresher-image=gjkim42/kelos-token-refresher:",
+		"--claude-code-image=ghcr.io/kelos-dev/claude-code:",
+		"--codex-image=ghcr.io/kelos-dev/codex:",
+		"--gemini-image=ghcr.io/kelos-dev/gemini:",
+		"--opencode-image=ghcr.io/kelos-dev/opencode:",
+		"--spawner-image=ghcr.io/kelos-dev/kelos-spawner:",
+		"--token-refresher-image=ghcr.io/kelos-dev/kelos-token-refresher:",
 	}
 	for _, arg := range expectedArgs {
 		if !bytes.Contains(manifests.InstallController, []byte(arg)) {
@@ -272,12 +272,12 @@ func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
 	// Verify all image args get the pinned version after substitution.
 	result := versionedManifest(manifests.InstallController, "v0.3.0")
 	versionedArgs := []string{
-		"--claude-code-image=gjkim42/claude-code:v0.3.0",
-		"--codex-image=gjkim42/codex:v0.3.0",
-		"--gemini-image=gjkim42/gemini:v0.3.0",
-		"--opencode-image=gjkim42/opencode:v0.3.0",
-		"--spawner-image=gjkim42/kelos-spawner:v0.3.0",
-		"--token-refresher-image=gjkim42/kelos-token-refresher:v0.3.0",
+		"--claude-code-image=ghcr.io/kelos-dev/claude-code:v0.3.0",
+		"--codex-image=ghcr.io/kelos-dev/codex:v0.3.0",
+		"--gemini-image=ghcr.io/kelos-dev/gemini:v0.3.0",
+		"--opencode-image=ghcr.io/kelos-dev/opencode:v0.3.0",
+		"--spawner-image=ghcr.io/kelos-dev/kelos-spawner:v0.3.0",
+		"--token-refresher-image=ghcr.io/kelos-dev/kelos-token-refresher:v0.3.0",
 	}
 	for _, arg := range versionedArgs {
 		if !bytes.Contains(result, []byte(arg)) {
@@ -289,14 +289,14 @@ func TestVersionedManifest_EmbeddedControllerImageArgs(t *testing.T) {
 func TestWithImagePullPolicy(t *testing.T) {
 	data := []byte(`      containers:
         - name: manager
-          image: gjkim42/kelos-controller:v0.1.0
+          image: ghcr.io/kelos-dev/kelos-controller:v0.1.0
           args:
             - --leader-elect
-            - --claude-code-image=gjkim42/claude-code:v0.1.0
-            - --spawner-image=gjkim42/kelos-spawner:v0.1.0`)
+            - --claude-code-image=ghcr.io/kelos-dev/claude-code:v0.1.0
+            - --spawner-image=ghcr.io/kelos-dev/kelos-spawner:v0.1.0`)
 	result := withImagePullPolicy(data, "Always")
 	// Verify container imagePullPolicy appears right after the image line.
-	expected := []byte("          image: gjkim42/kelos-controller:v0.1.0\n          imagePullPolicy: Always\n")
+	expected := []byte("          image: ghcr.io/kelos-dev/kelos-controller:v0.1.0\n          imagePullPolicy: Always\n")
 	if !bytes.Contains(result, expected) {
 		t.Errorf("expected imagePullPolicy right after image line, got:\n%s", string(result))
 	}

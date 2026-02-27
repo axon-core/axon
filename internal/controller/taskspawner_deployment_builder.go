@@ -16,10 +16,10 @@ import (
 
 const (
 	// DefaultSpawnerImage is the default image for the spawner binary.
-	DefaultSpawnerImage = "gjkim42/kelos-spawner:latest"
+	DefaultSpawnerImage = "ghcr.io/kelos-dev/kelos-spawner:latest"
 
 	// DefaultTokenRefresherImage is the default image for the token refresher sidecar.
-	DefaultTokenRefresherImage = "gjkim42/kelos-token-refresher:latest"
+	DefaultTokenRefresherImage = "ghcr.io/kelos-dev/kelos-token-refresher:latest"
 
 	// SpawnerServiceAccount is the service account used by spawner Deployments.
 	SpawnerServiceAccount = "kelos-spawner"
