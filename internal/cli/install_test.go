@@ -315,6 +315,59 @@ func TestWithImagePullPolicy(t *testing.T) {
 	}
 }
 
+func TestInstallCommand_CRDFlagDefault(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "CustomResourceDefinition") {
+		t.Errorf("expected CRD manifest in output by default, got:\n%s", output[:min(len(output), 500)])
+	}
+	if !strings.Contains(output, "Deployment") {
+		t.Errorf("expected controller manifest in output, got:\n%s", output[:min(len(output), 500)])
+	}
+}
+
+func TestInstallCommand_CRDFlagFalse(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--crd=false"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if strings.Contains(output, "CustomResourceDefinition") {
+		t.Errorf("expected no CRD manifest when --crd=false, got:\n%s", output[:min(len(output), 500)])
+	}
+	if !strings.Contains(output, "Deployment") {
+		t.Errorf("expected controller manifest in output, got:\n%s", output[:min(len(output), 500)])
+	}
+}
+
+func TestUninstallCommand_CRDFlagAccepted(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{
+		"uninstall",
+		"--crd=false",
+		"--kubeconfig", "/nonexistent/path/kubeconfig",
+	})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected uninstall to fail with invalid kubeconfig")
+	}
+	// The flag should be accepted; the error should be about kubeconfig, not an unknown flag.
+	if strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("--crd flag should be accepted, got: %v", err)
+	}
+}
+
 func TestWithImagePullPolicy_EmbeddedController(t *testing.T) {
 	result := withImagePullPolicy(manifests.InstallController, "IfNotPresent")
 	if !bytes.Contains(result, []byte("imagePullPolicy: IfNotPresent")) {
