@@ -4,7 +4,7 @@ metadata:
   name: my-workspace
 spec:
   # TODO: Replace with your repository URL.
-  repoURL: "https://github.com/your-org/your-repo.git"
-  base: main
-  tokenSecretRef:
+  repo: "https://github.com/your-org/your-repo.git"
+  ref: main
+  secretRef:
     name: github-token
