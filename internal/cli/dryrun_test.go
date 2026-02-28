@@ -581,8 +581,8 @@ func TestInstallCommand_DryRun(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "CustomResourceDefinition") {
-		t.Errorf("expected CRD manifest in dry-run output, got:\n%s", output[:min(len(output), 500)])
+	if strings.Contains(output, "CustomResourceDefinition") {
+		t.Errorf("expected no CRD manifest in default dry-run output, got:\n%s", output[:min(len(output), 500)])
 	}
 	if !strings.Contains(output, "Deployment") {
 		t.Errorf("expected Deployment manifest in dry-run output, got:\n%s", output[:min(len(output), 500)])

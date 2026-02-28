@@ -325,17 +325,17 @@ func TestInstallCommand_CRDFlagDefault(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(output, "CustomResourceDefinition") {
-		t.Errorf("expected CRD manifest in output by default, got:\n%s", output[:min(len(output), 500)])
+	if strings.Contains(output, "CustomResourceDefinition") {
+		t.Errorf("expected no CRD manifest in default output, got:\n%s", output[:min(len(output), 500)])
 	}
 	if !strings.Contains(output, "Deployment") {
 		t.Errorf("expected controller manifest in output, got:\n%s", output[:min(len(output), 500)])
 	}
 }
 
-func TestInstallCommand_CRDFlagFalse(t *testing.T) {
+func TestInstallCommand_CRDFlagTrue(t *testing.T) {
 	cmd := NewRootCommand()
-	cmd.SetArgs([]string{"install", "--dry-run", "--crd=false"})
+	cmd.SetArgs([]string{"install", "--dry-run", "--crd"})
 
 	output := captureStdout(t, func() {
 		if err := cmd.Execute(); err != nil {
@@ -343,8 +343,8 @@ func TestInstallCommand_CRDFlagFalse(t *testing.T) {
 		}
 	})
 
-	if strings.Contains(output, "CustomResourceDefinition") {
-		t.Errorf("expected no CRD manifest when --crd=false, got:\n%s", output[:min(len(output), 500)])
+	if !strings.Contains(output, "CustomResourceDefinition") {
+		t.Errorf("expected CRD manifest when --crd is set, got:\n%s", output[:min(len(output), 500)])
 	}
 	if !strings.Contains(output, "Deployment") {
 		t.Errorf("expected controller manifest in output, got:\n%s", output[:min(len(output), 500)])
@@ -355,7 +355,7 @@ func TestUninstallCommand_CRDFlagAccepted(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{
 		"uninstall",
-		"--crd=false",
+		"--crd",
 		"--kubeconfig", "/nonexistent/path/kubeconfig",
 	})
 	err := cmd.Execute()
