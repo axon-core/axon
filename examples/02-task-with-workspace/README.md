@@ -57,3 +57,8 @@ kubectl delete -f examples/02-task-with-workspace/
   and `git push` work out of the box.
 - The agent runs with full autonomy inside the Pod — it can create branches,
   push commits, and open PRs.
+- **GitHub App auth:** Instead of a PAT, you can use a GitHub App secret
+  (with `appID`, `installationID`, and `privateKey` keys). The controller
+  automatically exchanges App credentials for a short-lived installation
+  token. See the [Workspace reference](../../docs/reference.md#workspace-authentication)
+  for details.
