@@ -229,13 +229,7 @@ Or pass `--secret` to `kelos run` with a pre-created secret (api-key is the defa
 
 Kelos orchestrates the flow from external events to autonomous execution:
 
-```
-  Triggers (GitHub, Cron) ──┐
-                            │
-  Manual (CLI, YAML) ───────┼──▶  TaskSpawner  ──▶  Tasks  ──▶  Isolated Pods
-                            │          │              │             │
-  API (CI/CD, Webhooks) ────┘          └─(Lifecycle)──┴─(Execution)─┴─(Success/Fail)
-```
+<img width="2521" height="1582" alt="kelos-resources" src="https://github.com/user-attachments/assets/456c0534-22c0-4d90-b461-e34e33b07dd1" />
 
 You define what needs to be done, and Kelos handles the "how" — from cloning the right repo and injecting credentials to running the agent and capturing its outputs (branch names, commit SHAs, PR URLs, and token usage).
 
@@ -422,25 +416,7 @@ See the [full AgentConfig spec](docs/reference.md#agentconfig) for plugins, skil
 
 This is a real-world TaskSpawner that picks up every open issue, investigates it, opens (or updates) a PR, self-reviews, and ensures CI passes — fully autonomously. When the agent can't make progress, it labels the issue `kelos/needs-input` and stops. Remove the label to re-queue it.
 
-```
- ┌────────────────────────────────────────────────────────────────┐
- │                        Feedback Loop                           │
- │                                                                │
- │  ┌─────────────┐  polls  ┌────────────────┐                    │
- │  │ TaskSpawner │───────▶ │ GitHub Issues  │                    │
- │  └──────┬──────┘         │ (open, no      │                    │
- │         │                │  needs-input)  │                    │
- │         │ creates        └────────────────┘                    │
- │         ▼                                                      │
- │  ┌─────────────┐  runs   ┌─────────────┐  opens PR   ┌───────┐ │
- │  │    Task     │───────▶ │    Agent    │────────────▶│ Human │ │
- │  └─────────────┘  in Pod │   (Claude)  │  or labels  │Review │ │
- │                          └─────────────┘  needs-input└───┬───┘ │
- │                                                          │     │
- │                                           removes label ─┘     │
- │                                           (re-queues issue)    │
- └────────────────────────────────────────────────────────────────┘
-```
+<img width="2694" height="1966" alt="kelos-self-development" src="https://github.com/user-attachments/assets/969e6832-c480-4df2-bcc0-bf9314ece2d4" />
 
 See [`self-development/kelos-workers.yaml`](self-development/kelos-workers.yaml) for the full manifest and the [`self-development/` README](self-development/README.md) for setup instructions.
 
