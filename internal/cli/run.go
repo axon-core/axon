@@ -281,6 +281,10 @@ func newRunCommand(cfg *ClientConfig) *cobra.Command {
 			if watch {
 				return watchTask(ctx, cl, name, ns)
 			}
+
+			fmt.Fprintf(os.Stderr, "\nView logs:   kelos logs %s -f\n", name)
+			fmt.Fprintf(os.Stderr, "Get status:  kelos get task %s\n", name)
+			fmt.Fprintf(os.Stderr, "Watch:       kelos run -p \"...\" -w\n")
 			return nil
 		},
 	}

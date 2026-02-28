@@ -36,6 +36,32 @@ func captureStdout(t *testing.T, fn func()) string {
 	return out.String()
 }
 
+// captureStderr redirects os.Stderr to a pipe, executes fn, and returns
+// everything written to stderr.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating pipe: %v", err)
+	}
+	os.Stderr = w
+
+	var out bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		out.ReadFrom(r)
+		close(done)
+	}()
+
+	fn()
+
+	w.Close()
+	os.Stderr = old
+	<-done
+	return out.String()
+}
+
 func TestRunCommand_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -90,6 +116,35 @@ func TestRunCommand_DryRun(t *testing.T) {
 	// Ensure no "created" message is printed.
 	if strings.Contains(output, "created") {
 		t.Errorf("dry-run should not print 'created' message, got:\n%s", output)
+	}
+}
+
+func TestRunCommand_DryRun_NoNextStepHints(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("secret: my-secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stderr := captureStderr(t, func() {
+		_ = captureStdout(t, func() {
+			cmd := NewRootCommand()
+			cmd.SetArgs([]string{
+				"run",
+				"--config", cfgPath,
+				"--dry-run",
+				"--prompt", "hello world",
+				"--name", "test-task",
+				"--namespace", "test-ns",
+			})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	})
+
+	if strings.Contains(stderr, "View logs") {
+		t.Errorf("dry-run should not print next-step hints, got stderr:\n%s", stderr)
 	}
 }
 

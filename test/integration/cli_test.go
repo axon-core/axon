@@ -1,6 +1,8 @@
 package integration
 
 import (
+	"bytes"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -20,6 +22,37 @@ func runCLI(kubeconfigPath, namespace string, args ...string) error {
 	fullArgs := append([]string{"--kubeconfig", kubeconfigPath, "-n", namespace}, args...)
 	root.SetArgs(fullArgs)
 	return root.Execute()
+}
+
+// runCLICapturingOutput runs the CLI and returns captured stdout and stderr.
+func runCLICapturingOutput(kubeconfigPath, namespace string, args ...string) (stdout, stderr string, err error) {
+	oldOut := os.Stdout
+	oldErr := os.Stderr
+
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	var outBuf, errBuf bytes.Buffer
+	outDone := make(chan struct{})
+	errDone := make(chan struct{})
+	go func() { outBuf.ReadFrom(rOut); close(outDone) }()
+	go func() { errBuf.ReadFrom(rErr); close(errDone) }()
+
+	root := cli.NewRootCommand()
+	fullArgs := append([]string{"--kubeconfig", kubeconfigPath, "-n", namespace}, args...)
+	root.SetArgs(fullArgs)
+	execErr := root.Execute()
+
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldOut
+	os.Stderr = oldErr
+	<-outDone
+	<-errDone
+
+	return outBuf.String(), errBuf.String(), execErr
 }
 
 var _ = Describe("CLI Workspace Commands", func() {
@@ -790,6 +823,51 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 			output = runComplete(kubeconfigPath, ns.Name, "resume", "taskspawner", "")
 			Expect(output).To(ContainSubstring("spawner-suspend-comp"))
 			Expect(output).To(ContainSubstring(":4"))
+		})
+	})
+})
+
+var _ = Describe("CLI Run Command", func() {
+	Context("When creating a task without --watch", func() {
+		It("Should print next-step hints to stderr", func() {
+			By("Creating a namespace")
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-cli-run-hints",
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).Should(Succeed())
+
+			By("Creating the credential secret")
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-run-secret",
+					Namespace: ns.Name,
+				},
+				StringData: map[string]string{
+					"ANTHROPIC_API_KEY": "test-key",
+				},
+			}
+			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
+
+			kubeconfigPath := writeEnvtestKubeconfig()
+
+			By("Running the task without --watch")
+			stdout, stderr, err := runCLICapturingOutput(kubeconfigPath, ns.Name,
+				"run",
+				"--prompt", "hello",
+				"--secret", "test-run-secret",
+				"--name", "hint-task",
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying stdout has the created message")
+			Expect(stdout).To(ContainSubstring("task/hint-task created"))
+
+			By("Verifying stderr has next-step hints")
+			Expect(stderr).To(ContainSubstring("kelos logs hint-task -f"))
+			Expect(stderr).To(ContainSubstring("kelos get task hint-task"))
+			Expect(stderr).To(ContainSubstring("-w"))
 		})
 	})
 })
