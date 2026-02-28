@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#kelos-developing-kelos">Kelos Developing Kelos</a> &middot;
   <a href="#examples">Examples</a> &middot;
   <a href="docs/reference.md">Reference</a> &middot;
   <a href="examples/">YAML Manifests</a>
@@ -58,27 +59,9 @@ TaskSpawner watches external sources (e.g., GitHub Issues) and automatically cre
 
 </details>
 
-## Demo
-
-```bash
-# Run multiple tasks in parallel across your repo
-$ kelos run -p "Fix the bug described in issue #42 and open a PR" --name fix-42
-$ kelos run -p "Add unit tests for the auth module" --name add-tests
-$ kelos run -p "Update API docs for v2 endpoints" --name update-docs
-
-# Watch all tasks progress simultaneously
-$ kelos get tasks
-NAME          TYPE          PHASE     BRANCH                WORKSPACE   AGENT CONFIG   DURATION   AGE
-fix-42        claude-code   Running   kelos-task-fix-42      my-repo     my-config      2m         2m
-add-tests     claude-code   Running   kelos-task-add-tests   my-repo     my-config      1m         1m
-update-docs   claude-code   Running   kelos-task-update-docs my-repo     my-config      45s        45s
-```
-
-https://github.com/user-attachments/assets/bb10e8ba-ecdf-4dc5-9a74-070d9335a00b
-
 ## Kelos Developing Kelos
 
-This is the crown jewel: a fully autonomous development pipeline where Kelos develops itself. Five TaskSpawners run 24/7, each handling a different part of the development lifecycle.
+Kelos develops itself. Five TaskSpawners run 24/7, each handling a different part of the development lifecycle — fully autonomous.
 
 <img width="2694" height="1966" alt="kelos-self-development" src="https://github.com/user-attachments/assets/969e6832-c480-4df2-bcc0-bf9314ece2d4" />
 
