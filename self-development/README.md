@@ -178,7 +178,7 @@ Each run picks one focus area:
 - **Workflow Completeness** — check that agent prompts reflect current project conventions and Makefile targets
 - **Task Template Maintenance** — keep one-off task definitions in sync with their TaskSpawner counterparts
 
-Creates a PR for code changes or an issue if discussion is needed.
+Creates GitHub issues for actionable improvements found.
 
 **Deploy:**
 ```bash
