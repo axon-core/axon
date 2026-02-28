@@ -27,8 +27,9 @@ func RenderPrompt(promptTemplate string, item WorkItem) (string, error) {
 }
 
 // RenderTemplate renders a Go text/template string with the given work item's fields.
-// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}},
-// {{.Labels}}, {{.Comments}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
+// Available variables (all sources): {{.ID}}, {{.Title}}, {{.Kind}}
+// GitHub/Jira sources: {{.Number}}, {{.Body}}, {{.URL}}, {{.Labels}}, {{.Comments}}
+// Cron sources: {{.Time}}, {{.Schedule}}
 func RenderTemplate(tmplStr string, item WorkItem) (string, error) {
 	tmpl, err := template.New("tmpl").Parse(tmplStr)
 	if err != nil {
