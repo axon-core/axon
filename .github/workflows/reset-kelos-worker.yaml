@@ -23,7 +23,9 @@ concurrency:
 
 jobs:
   reset-kelos-worker:
-    if: contains(github.event.comment.body || github.event.review.body || '', '/reset-worker')
+    if: >-
+      contains(github.event.comment.body || github.event.review.body || '', '/reset-worker')
+      && (github.event.sender.type || 'User') == 'User'
     runs-on: ubuntu-latest
     env:
       KELOS_NAMESPACE: ${{ vars.KELOS_NAMESPACE || 'default' }}
@@ -56,9 +58,17 @@ jobs:
               return [...new Set(numbers)].filter((n) => Number.isInteger(n) && n > 0)
             }
 
+            // Validate the command appears at the start of a line (not incidental text)
+            const body = context.payload.comment?.body || context.payload.review?.body || ""
+            if (!/(?:^|\n)\s*\/reset-worker\b/.test(body)) {
+              core.info("Ignoring comment: /reset-worker does not appear as a standalone command")
+              core.setOutput("should_reset", "false")
+              return
+            }
+
             // For pull_request_review events, the commenter is in review.user
             // For issue_comment and pull_request_review_comment events, it is in comment.user
-            const commenter = context.payload.comment?.user?.login || context.payload.review?.user?.login || ""
+            const commenter = context.payload.sender?.login || context.payload.comment?.user?.login || context.payload.review?.user?.login || ""
             if (!commenter) {
               core.info("Ignoring /reset-worker with unknown commenter")
               core.setOutput("should_reset", "false")

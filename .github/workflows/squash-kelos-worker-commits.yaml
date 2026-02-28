@@ -23,7 +23,9 @@ concurrency:
 
 jobs:
   squash-kelos-worker-commits:
-    if: contains(github.event.comment.body || github.event.review.body || '', '/squash-commits')
+    if: >-
+      contains(github.event.comment.body || github.event.review.body || '', '/squash-commits')
+      && (github.event.sender.type || 'User') == 'User'
     runs-on: ubuntu-latest
     env:
       KELOS_NAMESPACE: ${{ vars.KELOS_NAMESPACE || 'default' }}
@@ -56,7 +58,15 @@ jobs:
               return [...new Set(numbers)].filter((n) => Number.isInteger(n) && n > 0)
             }
 
-            const commenter = context.payload.comment?.user?.login || context.payload.review?.user?.login || ""
+            // Validate the command appears at the start of a line (not incidental text)
+            const body = context.payload.comment?.body || context.payload.review?.body || ""
+            if (!/(?:^|\n)\s*\/squash-commits\b/.test(body)) {
+              core.info("Ignoring comment: /squash-commits does not appear as a standalone command")
+              core.setOutput("should_reset", "false")
+              return
+            }
+
+            const commenter = context.payload.sender?.login || context.payload.comment?.user?.login || context.payload.review?.user?.login || ""
             if (!commenter) {
               core.info("Ignoring /squash-commits with unknown commenter")
               core.setOutput("should_reset", "false")
