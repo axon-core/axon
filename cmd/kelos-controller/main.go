@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -10,12 +12,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	kelosv1alpha1 "github.com/kelos-dev/kelos/api/v1alpha1"
 	"github.com/kelos-dev/kelos/internal/controller"
 	"github.com/kelos-dev/kelos/internal/githubapp"
+	"github.com/kelos-dev/kelos/internal/telemetry"
 )
 
 var (
@@ -44,6 +48,9 @@ func main() {
 	var spawnerImagePullPolicy string
 	var tokenRefresherImage string
 	var tokenRefresherImagePullPolicy string
+	var telemetryReport bool
+	var telemetryEndpoint string
+	var telemetryEnvironment string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -62,6 +69,9 @@ func main() {
 	flag.StringVar(&spawnerImagePullPolicy, "spawner-image-pull-policy", "", "The image pull policy for spawner Deployments (e.g., Always, Never, IfNotPresent).")
 	flag.StringVar(&tokenRefresherImage, "token-refresher-image", controller.DefaultTokenRefresherImage, "The image to use for the token refresher sidecar.")
 	flag.StringVar(&tokenRefresherImagePullPolicy, "token-refresher-image-pull-policy", "", "The image pull policy for the token refresher sidecar (e.g., Always, Never, IfNotPresent).")
+	flag.BoolVar(&telemetryReport, "telemetry-report", false, "Run a one-shot telemetry report and exit.")
+	flag.StringVar(&telemetryEndpoint, "telemetry-endpoint", telemetry.DefaultPostHogEndpoint, "The PostHog endpoint for sending telemetry reports.")
+	flag.StringVar(&telemetryEnvironment, "telemetry-environment", "production", "The environment label for telemetry reports (e.g., production, development).")
 
 	opts := zap.Options{
 		Development: true,
@@ -70,6 +80,37 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if telemetryReport {
+		log := ctrl.Log.WithName("telemetry")
+		cfg := ctrl.GetConfigOrDie()
+
+		c, err := client.New(cfg, client.Options{Scheme: scheme})
+		if err != nil {
+			setupLog.Error(err, "Unable to create client for telemetry")
+			os.Exit(1)
+		}
+
+		clientset, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			setupLog.Error(err, "Unable to create clientset for telemetry")
+			os.Exit(1)
+		}
+
+		phClient, err := telemetry.NewPostHogClient(telemetryEndpoint)
+		if err != nil {
+			setupLog.Error(err, "Unable to create PostHog client")
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := telemetry.Run(ctx, log, c, clientset, phClient, telemetryEnvironment); err != nil {
+			setupLog.Error(err, "Telemetry report failed")
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

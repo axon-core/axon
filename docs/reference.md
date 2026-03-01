@@ -310,3 +310,27 @@ The `kelos` CLI lets you manage the full lifecycle without writing YAML.
 - `--kubeconfig`: Path to kubeconfig file
 - `--dry-run`: Print resources without creating them (supported by `run`, `create`, `install`)
 - `--yes, -y`: Skip confirmation prompts
+
+## Telemetry
+
+Kelos collects anonymous, aggregate usage data to help improve the project. A `kelos-telemetry` CronJob runs daily at 06:00 UTC and reports the following:
+
+| Data | Description |
+|------|-------------|
+| Installation ID | Random UUID, generated once per cluster |
+| Kelos version | Installed controller version |
+| Kubernetes version | Cluster K8s version |
+| Task counts | Total tasks, breakdown by type and phase |
+| Feature adoption | Number of TaskSpawners, AgentConfigs, Workspaces, and source types in use |
+| Scale | Number of namespaces with Kelos resources |
+| Usage totals | Aggregate cost (USD), input tokens, and output tokens |
+
+No personal data, repository names, prompts, or source code is collected.
+
+### Disabling Telemetry
+
+Install (or reinstall) with the `--disable-heartbeat` flag:
+
+```bash
+kelos install --disable-heartbeat
+```

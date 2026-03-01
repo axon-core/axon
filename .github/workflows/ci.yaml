@@ -106,7 +106,7 @@ jobs:
 
       - name: Deploy controller
         run: |
-          bin/kelos install --version e2e --image-pull-policy Never
+          bin/kelos install --version e2e --image-pull-policy Never --disable-heartbeat
           kubectl wait --for=condition=available deployment/kelos-controller-manager -n kelos-system --timeout=120s
 
       - name: E2E Test

@@ -374,6 +374,44 @@ func TestInstallCommand_VersionFlag(t *testing.T) {
 	}
 }
 
+func TestWithoutTelemetryCronJob(t *testing.T) {
+	result := withoutTelemetryCronJob(manifests.InstallController)
+	objs, err := parseManifests(result)
+	if err != nil {
+		t.Fatalf("parsing result: %v", err)
+	}
+	for _, obj := range objs {
+		if obj.GetKind() == "CronJob" && obj.GetName() == "kelos-telemetry" {
+			t.Error("expected kelos-telemetry CronJob to be removed")
+		}
+	}
+	// Other resources should still be present.
+	kinds := make(map[string]bool)
+	for _, obj := range objs {
+		kinds[obj.GetKind()] = true
+	}
+	for _, expected := range []string{"Namespace", "ServiceAccount", "Deployment"} {
+		if !kinds[expected] {
+			t.Errorf("expected %s to still be present after removing telemetry CronJob", expected)
+		}
+	}
+}
+
+func TestInstallCommand_DisableHeartbeatFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--disable-heartbeat"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if strings.Contains(output, "kelos-telemetry") {
+		t.Error("expected kelos-telemetry CronJob to be excluded from output")
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"version"})

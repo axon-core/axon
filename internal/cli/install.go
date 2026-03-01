@@ -33,6 +33,7 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	var dryRun bool
 	var flagVersion string
 	var imagePullPolicy string
+	var disableHeartbeat bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -45,6 +46,9 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 			controllerManifest := versionedManifest(manifests.InstallController, version.Version)
 			if imagePullPolicy != "" {
 				controllerManifest = withImagePullPolicy(controllerManifest, imagePullPolicy)
+			}
+			if disableHeartbeat {
+				controllerManifest = withoutTelemetryCronJob(controllerManifest)
 			}
 
 			if dryRun {
@@ -90,6 +94,7 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the manifests that would be applied without installing")
 	cmd.Flags().StringVar(&flagVersion, "version", "", "override the version used for image tags (defaults to the binary version)")
 	cmd.Flags().StringVar(&imagePullPolicy, "image-pull-policy", "", "set imagePullPolicy on controller containers (e.g. Always, IfNotPresent, Never)")
+	cmd.Flags().BoolVar(&disableHeartbeat, "disable-heartbeat", false, "do not install the telemetry heartbeat CronJob")
 
 	return cmd
 }
@@ -131,6 +136,31 @@ func withImagePullPolicy(data []byte, policy string) []byte {
 			buf.WriteString(policy)
 			buf.WriteByte('\n')
 		}
+	}
+	return buf.Bytes()
+}
+
+// withoutTelemetryCronJob removes the kelos-telemetry CronJob from the manifest.
+func withoutTelemetryCronJob(data []byte) []byte {
+	objs, err := parseManifests(data)
+	if err != nil {
+		return data
+	}
+	var buf bytes.Buffer
+	first := true
+	for _, obj := range objs {
+		if obj.GetKind() == "CronJob" && obj.GetName() == "kelos-telemetry" {
+			continue
+		}
+		if !first {
+			buf.WriteString("---\n")
+		}
+		raw, err := yaml.Marshal(obj.Object)
+		if err != nil {
+			return data
+		}
+		buf.Write(raw)
+		first = false
 	}
 	return buf.Bytes()
 }
