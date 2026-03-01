@@ -3,6 +3,8 @@ name: Retest
 on:
   issue_comment:
     types: [created]
+  pull_request_target:
+    types: [labeled]
 
 jobs:
   retest:
@@ -46,3 +48,18 @@ jobs:
           HEAD_REF=$(gh pr view "$PR_NUMBER" --json headRefName -q .headRefName)
           OK_TO_TEST=$(gh pr view "$PR_NUMBER" --json labels -q '[.labels[].name] | any(. == "ok-to-test")')
           gh workflow run ci.yaml --ref "$HEAD_REF" -f "ok-to-test=$OK_TO_TEST"
+
+  trigger-on-ok-to-test:
+    if: >-
+      github.event_name == 'pull_request_target' && github.event.label.name == 'ok-to-test'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Trigger CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          gh workflow run ci.yaml --ref "$HEAD_REF" -f "ok-to-test=true"
