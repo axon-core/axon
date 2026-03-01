@@ -183,12 +183,16 @@ type TaskTemplate struct {
 
 	// Branch is the git branch spawned Tasks should work on.
 	// Supports Go text/template variables from the work item, e.g. "kelos-task-{{.Number}}".
-	// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
+	// Available variables (all sources): {{.ID}}, {{.Title}}, {{.Kind}}
+	// GitHub/Jira sources: {{.Number}}, {{.Body}}, {{.URL}}, {{.Labels}}, {{.Comments}}
+	// Cron sources: {{.Time}}, {{.Schedule}}
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
 	// PromptTemplate is a Go text/template for rendering the task prompt.
-	// Available variables: {{.ID}}, {{.Number}}, {{.Title}}, {{.Body}}, {{.URL}}, {{.Comments}}, {{.Labels}}, {{.Kind}}, {{.Time}}, {{.Schedule}}.
+	// Available variables (all sources): {{.ID}}, {{.Title}}, {{.Kind}}
+	// GitHub/Jira sources: {{.Number}}, {{.Body}}, {{.URL}}, {{.Labels}}, {{.Comments}}
+	// Cron sources: {{.Time}}, {{.Schedule}}
 	// +optional
 	PromptTemplate string `json:"promptTemplate,omitempty"`
 
