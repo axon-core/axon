@@ -49,6 +49,7 @@ spec:
       ```
       gh pr view {number} --comments
       gh pr view {number} --json reviews
+      gh api repos/{owner}/{repo}/pulls/{number}/comments
       ```
 
       Categorize rejections into failure modes:
