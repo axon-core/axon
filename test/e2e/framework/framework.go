@@ -235,6 +235,15 @@ func (f *Framework) CreateWorkspace(ws *kelosv1alpha1.Workspace) {
 	Expect(err).NotTo(HaveOccurred(), "Failed to create workspace %s", ws.Name)
 }
 
+// CreateAgentConfig creates an AgentConfig in the test namespace using the kelos clientset.
+func (f *Framework) CreateAgentConfig(ac *kelosv1alpha1.AgentConfig) {
+	if ac.Namespace == "" {
+		ac.Namespace = f.Namespace
+	}
+	_, err := f.KelosClientset.ApiV1alpha1().AgentConfigs(ac.Namespace).Create(context.TODO(), ac, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "Failed to create agentconfig %s", ac.Name)
+}
+
 // CreateTaskSpawner creates a TaskSpawner in the test namespace using the kelos clientset.
 func (f *Framework) CreateTaskSpawner(ts *kelosv1alpha1.TaskSpawner) {
 	if ts.Namespace == "" {
