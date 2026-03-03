@@ -17,6 +17,13 @@
   - e2e tests are hard to run locally. Push changes and use the PR's CI jobs to run them instead.
 - `make build` — build binary
 
+## Pull Requests
+- **Always follow `.github/PULL_REQUEST_TEMPLATE.md`** when creating PRs.
+- Fill in every section of the template. Do not remove or skip sections — use "N/A" or "NONE" where appropriate.
+- Choose exactly one `/kind` label from: `bug`, `cleanup`, `documentation`, `feature`.
+- If there is no associated issue, write "N/A" under the issue section.
+- If the PR does not introduce a user-facing change, write "NONE" in the `release-note` block.
+
 ## Directory Structure
 - `cmd/` — CLI entrypoints
 - `test/e2e/` — end-to-end tests
