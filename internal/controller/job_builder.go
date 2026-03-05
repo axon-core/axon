@@ -135,6 +135,8 @@ func apiKeyEnvVar(agentType string) string {
 		// entrypoint reads for API key authentication.
 		return "OPENCODE_API_KEY"
 	case AgentTypeCursor:
+		// CURSOR_API_KEY is the environment variable that the cursor
+		// entrypoint reads for API key authentication.
 		return "CURSOR_API_KEY"
 	default:
 		return "ANTHROPIC_API_KEY"
@@ -152,6 +154,8 @@ func oauthEnvVar(agentType string) string {
 	case AgentTypeOpenCode:
 		return "OPENCODE_API_KEY"
 	case AgentTypeCursor:
+		// Cursor uses the same CURSOR_API_KEY for both API key and
+		// OAuth credential flows.
 		return "CURSOR_API_KEY"
 	default:
 		return "CLAUDE_CODE_OAUTH_TOKEN"
