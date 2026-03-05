@@ -228,7 +228,7 @@ task/task-r8x2q created
 $ kelos logs task-r8x2q -f
 ```
 
-The task name (e.g. `task-r8x2q`) is auto-generated. Use `--name` to set a custom name, or `-w` to automatically watch task logs.
+The task name (e.g. `task-r8x2q`) is auto-generated. Use `--name` to set a custom name, or `-w` to watch task status after creation. To stream agent logs, run `kelos logs <task-name> -f`.
 
 The agent clones your repo, makes changes, and can push a branch or open a PR.
 
