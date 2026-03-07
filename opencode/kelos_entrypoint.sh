@@ -13,6 +13,10 @@
 
 set -uo pipefail
 
+# Remove stale gh CLI auth state so that the injected workspace token
+# (GH_TOKEN / GH_ENTERPRISE_TOKEN env var) is always authoritative.
+rm -f "$HOME/.config/gh/hosts.yml" 2>/dev/null || true
+
 PROMPT="${1:?Prompt argument is required}"
 
 # Map OPENCODE_API_KEY to the correct provider environment variable
