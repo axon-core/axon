@@ -58,6 +58,12 @@ const (
 	// (e.g., installing skills.sh packages).
 	NodeImage = "node:22.14.0-alpine"
 
+	// GHConfigDir is the directory used for gh CLI configuration when
+	// workspace auth is enabled. It is placed on the shared workspace
+	// volume so that gh does not read stale auth from the container
+	// image's home directory.
+	GHConfigDir = WorkspaceMountPath + "/.gh-config"
+
 	// AgentUID is the UID shared between the git-clone init
 	// container and the agent container. Custom agent images must run
 	// as this UID so that both containers can read and write the
@@ -269,6 +275,13 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 		}
 		envVars = append(envVars, ghTokenEnv)
 		workspaceEnvVars = append(workspaceEnvVars, ghTokenEnv)
+
+		// Point gh CLI at a clean config directory on the workspace volume
+		// so it does not read stale auth from the container image.
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "GH_CONFIG_DIR",
+			Value: GHConfigDir,
+		})
 	}
 
 	backoffLimit := int32(1)
@@ -324,10 +337,16 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 
 		if workspace.SecretRef != nil {
 			credentialHelper := `!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f`
+			// Clear inherited credential helpers with an empty -c credential.helper=
+			// before setting the workspace helper, then persist the same
+			// configuration into the repo so the agent container is
+			// independent from global/system helpers.
 			initContainer.Command = []string{"sh", "-c",
 				fmt.Sprintf(
-					`git -c credential.helper='%s' "$@" && git -C %s/repo config credential.helper '%s'`,
-					credentialHelper, WorkspaceMountPath, credentialHelper,
+					`git -c credential.helper= -c credential.helper='%s' "$@" && { `+
+						`git -C %s/repo config --unset-all credential.helper 2>/dev/null || true; `+
+						`git -C %s/repo config --add credential.helper '%s'; }`,
+					credentialHelper, WorkspaceMountPath, WorkspaceMountPath, credentialHelper,
 				),
 			}
 			initContainer.Args = append([]string{"--"}, cloneArgs...)
@@ -357,7 +376,7 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 			fetchCmd := `git fetch origin "$KELOS_BRANCH":"$KELOS_BRANCH" 2>/dev/null`
 			if workspace.SecretRef != nil {
 				credHelper := `!f() { echo "username=x-access-token"; echo "password=$GITHUB_TOKEN"; }; f`
-				fetchCmd = fmt.Sprintf(`git -c credential.helper='%s' fetch origin "$KELOS_BRANCH":"$KELOS_BRANCH" 2>/dev/null`, credHelper)
+				fetchCmd = fmt.Sprintf(`git -c credential.helper= -c credential.helper='%s' fetch origin "$KELOS_BRANCH":"$KELOS_BRANCH" 2>/dev/null`, credHelper)
 			}
 			branchSetupScript := fmt.Sprintf(
 				`cd %s/repo && %s; `+

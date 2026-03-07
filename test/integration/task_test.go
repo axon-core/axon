@@ -466,20 +466,26 @@ var _ = Describe("Task Controller", func() {
 			Expect(mainContainer.Command).To(Equal([]string{"/kelos_entrypoint.sh"}))
 			Expect(mainContainer.Args).To(Equal([]string{"Create a PR"}))
 
-			By("Verifying the main container has KELOS_AGENT_TYPE, ANTHROPIC_API_KEY, KELOS_BASE_BRANCH, GITHUB_TOKEN, and GH_TOKEN env vars")
-			Expect(mainContainer.Env).To(HaveLen(5))
-			Expect(mainContainer.Env[0].Name).To(Equal("KELOS_AGENT_TYPE"))
-			Expect(mainContainer.Env[0].Value).To(Equal("claude-code"))
-			Expect(mainContainer.Env[1].Name).To(Equal("ANTHROPIC_API_KEY"))
-			Expect(mainContainer.Env[1].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
-			Expect(mainContainer.Env[2].Name).To(Equal("KELOS_BASE_BRANCH"))
-			Expect(mainContainer.Env[2].Value).To(Equal("main"))
-			Expect(mainContainer.Env[3].Name).To(Equal("GITHUB_TOKEN"))
-			Expect(mainContainer.Env[3].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
-			Expect(mainContainer.Env[3].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
-			Expect(mainContainer.Env[4].Name).To(Equal("GH_TOKEN"))
-			Expect(mainContainer.Env[4].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
-			Expect(mainContainer.Env[4].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
+			By("Verifying the main container has KELOS_AGENT_TYPE, ANTHROPIC_API_KEY, KELOS_BASE_BRANCH, GITHUB_TOKEN, GH_TOKEN, and GH_CONFIG_DIR env vars")
+			Expect(mainContainer.Env).To(HaveLen(6))
+			mainEnv := map[string]corev1.EnvVar{}
+			for _, envVar := range mainContainer.Env {
+				mainEnv[envVar.Name] = envVar
+			}
+			Expect(mainEnv).To(HaveKey("KELOS_AGENT_TYPE"))
+			Expect(mainEnv["KELOS_AGENT_TYPE"].Value).To(Equal("claude-code"))
+			Expect(mainEnv).To(HaveKey("ANTHROPIC_API_KEY"))
+			Expect(mainEnv["ANTHROPIC_API_KEY"].ValueFrom.SecretKeyRef.Name).To(Equal("anthropic-api-key"))
+			Expect(mainEnv).To(HaveKey("KELOS_BASE_BRANCH"))
+			Expect(mainEnv["KELOS_BASE_BRANCH"].Value).To(Equal("main"))
+			Expect(mainEnv).To(HaveKey("GITHUB_TOKEN"))
+			Expect(mainEnv["GITHUB_TOKEN"].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
+			Expect(mainEnv["GITHUB_TOKEN"].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
+			Expect(mainEnv).To(HaveKey("GH_TOKEN"))
+			Expect(mainEnv["GH_TOKEN"].ValueFrom.SecretKeyRef.Name).To(Equal("github-token"))
+			Expect(mainEnv["GH_TOKEN"].ValueFrom.SecretKeyRef.Key).To(Equal("GITHUB_TOKEN"))
+			Expect(mainEnv).To(HaveKey("GH_CONFIG_DIR"))
+			Expect(mainEnv["GH_CONFIG_DIR"].Value).To(Equal(controller.GHConfigDir))
 
 			By("Verifying the init container has GITHUB_TOKEN, GH_TOKEN env vars and credential helper")
 			Expect(createdJob.Spec.Template.Spec.InitContainers).To(HaveLen(1))
@@ -496,7 +502,9 @@ var _ = Describe("Task Controller", func() {
 			Expect(initContainer.Command).To(HaveLen(3))
 			Expect(initContainer.Command[0]).To(Equal("sh"))
 			Expect(initContainer.Command[2]).To(ContainSubstring("git -c credential.helper="))
-			Expect(initContainer.Command[2]).To(ContainSubstring("git -C /workspace/repo config credential.helper"))
+			Expect(initContainer.Command[2]).To(ContainSubstring(`"$@" && {`))
+			Expect(initContainer.Command[2]).To(ContainSubstring("git -C /workspace/repo config --unset-all credential.helper"))
+			Expect(initContainer.Command[2]).To(ContainSubstring("git -C /workspace/repo config --add credential.helper"))
 			Expect(initContainer.Args).To(Equal([]string{
 				"--", "clone", "--branch", "main", "--no-single-branch", "--depth", "1",
 				"--", "https://github.com/example/repo.git", "/workspace/repo",

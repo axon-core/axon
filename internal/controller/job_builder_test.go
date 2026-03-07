@@ -391,7 +391,7 @@ func TestBuildClaudeCodeJob_CustomImageWithWorkspace(t *testing.T) {
 		t.Errorf("Expected FSGroup %d, got %d", ClaudeCodeUID, *job.Spec.Template.Spec.SecurityContext.FSGroup)
 	}
 
-	// Should have KELOS_MODEL with correct value, ANTHROPIC_API_KEY, GITHUB_TOKEN, GH_TOKEN.
+	// Should have KELOS_MODEL with correct value, ANTHROPIC_API_KEY, GITHUB_TOKEN, GH_TOKEN, GH_CONFIG_DIR.
 	envMap := map[string]string{}
 	for _, env := range container.Env {
 		if env.Value != "" {
@@ -400,10 +400,13 @@ func TestBuildClaudeCodeJob_CustomImageWithWorkspace(t *testing.T) {
 			envMap[env.Name] = "(from-secret)"
 		}
 	}
-	for _, name := range []string{"KELOS_MODEL", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"} {
+	for _, name := range []string{"KELOS_MODEL", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "GH_CONFIG_DIR"} {
 		if _, ok := envMap[name]; !ok {
 			t.Errorf("Expected env var %q to be set", name)
 		}
+	}
+	if envMap["GH_CONFIG_DIR"] != GHConfigDir {
+		t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, envMap["GH_CONFIG_DIR"])
 	}
 	if envMap["KELOS_MODEL"] != "gpt-4" {
 		t.Errorf("KELOS_MODEL value: expected %q, got %q", "gpt-4", envMap["KELOS_MODEL"])
@@ -449,13 +452,22 @@ func TestBuildClaudeCodeJob_WorkspaceWithSecretRefPersistsCredentialHelper(t *te
 
 	script := initContainer.Command[2]
 
-	// The script must clone with an inline credential helper AND persist it
-	// to the repo config so the agent container can authenticate with git.
-	if !strings.Contains(script, "git -c credential.helper=") {
-		t.Error("Expected init container script to include inline credential helper for clone")
+	// The script must clear inherited credential helpers before the clone
+	// and persist the workspace helper into the repo config.
+	if !strings.Contains(script, "-c credential.helper= -c credential.helper=") {
+		t.Error("Expected init container script to clear inherited credential helpers before setting workspace helper")
 	}
-	if !strings.Contains(script, "git -C "+WorkspaceMountPath+"/repo config credential.helper") {
-		t.Error("Expected init container script to persist credential helper in repo config")
+	if !strings.Contains(script, `"$@" && {`) {
+		t.Error("Expected repo helper persistence to be gated on a successful clone")
+	}
+	if !strings.Contains(script, "--unset-all credential.helper") {
+		t.Error("Expected init container script to unset-all credential.helper in repo config")
+	}
+	if !strings.Contains(script, `&& { git -C /workspace/repo config --unset-all credential.helper 2>/dev/null || true;`) {
+		t.Error("Expected repo credential helper persistence to run only after a successful clone")
+	}
+	if !strings.Contains(script, "--add credential.helper") {
+		t.Error("Expected init container script to --add credential helper in repo config")
 	}
 }
 
@@ -512,6 +524,10 @@ func TestBuildClaudeCodeJob_EnterpriseWorkspaceSetsGHHostAndEnterpriseToken(t *t
 	// GITHUB_TOKEN should still be set (used for git credential helper).
 	if _, ok := envMap["GITHUB_TOKEN"]; !ok {
 		t.Error("Expected GITHUB_TOKEN to be set for enterprise workspace")
+	}
+	// GH_CONFIG_DIR should be set for enterprise workspace too.
+	if envMap["GH_CONFIG_DIR"] != GHConfigDir {
+		t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, envMap["GH_CONFIG_DIR"])
 	}
 
 	initContainer := job.Spec.Template.Spec.InitContainers[0]
@@ -748,7 +764,7 @@ func TestBuildCodexJob_WithWorkspace(t *testing.T) {
 		t.Fatalf("Expected 1 volume mount, got %d", len(container.VolumeMounts))
 	}
 
-	// Should have CODEX_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN.
+	// Should have CODEX_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN, GH_CONFIG_DIR.
 	envMap := map[string]string{}
 	for _, env := range container.Env {
 		if env.Value != "" {
@@ -757,10 +773,13 @@ func TestBuildCodexJob_WithWorkspace(t *testing.T) {
 			envMap[env.Name] = "(from-secret)"
 		}
 	}
-	for _, name := range []string{"KELOS_MODEL", "CODEX_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"} {
+	for _, name := range []string{"KELOS_MODEL", "CODEX_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "GH_CONFIG_DIR"} {
 		if _, ok := envMap[name]; !ok {
 			t.Errorf("Expected env var %q to be set", name)
 		}
+	}
+	if envMap["GH_CONFIG_DIR"] != GHConfigDir {
+		t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, envMap["GH_CONFIG_DIR"])
 	}
 	if _, ok := envMap["ANTHROPIC_API_KEY"]; ok {
 		t.Error("ANTHROPIC_API_KEY should not be set for codex agent type")
@@ -995,7 +1014,7 @@ func TestBuildGeminiJob_WithWorkspace(t *testing.T) {
 		t.Fatalf("Expected 1 volume mount, got %d", len(container.VolumeMounts))
 	}
 
-	// Should have GEMINI_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN.
+	// Should have GEMINI_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN, GH_CONFIG_DIR.
 	envMap := map[string]string{}
 	for _, env := range container.Env {
 		if env.Value != "" {
@@ -1004,10 +1023,13 @@ func TestBuildGeminiJob_WithWorkspace(t *testing.T) {
 			envMap[env.Name] = "(from-secret)"
 		}
 	}
-	for _, name := range []string{"KELOS_MODEL", "GEMINI_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"} {
+	for _, name := range []string{"KELOS_MODEL", "GEMINI_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "GH_CONFIG_DIR"} {
 		if _, ok := envMap[name]; !ok {
 			t.Errorf("Expected env var %q to be set", name)
 		}
+	}
+	if envMap["GH_CONFIG_DIR"] != GHConfigDir {
+		t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, envMap["GH_CONFIG_DIR"])
 	}
 	if _, ok := envMap["ANTHROPIC_API_KEY"]; ok {
 		t.Error("ANTHROPIC_API_KEY should not be set for gemini agent type")
@@ -1248,7 +1270,7 @@ func TestBuildOpenCodeJob_WithWorkspace(t *testing.T) {
 		t.Fatalf("Expected 1 volume mount, got %d", len(container.VolumeMounts))
 	}
 
-	// Should have OPENCODE_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN.
+	// Should have OPENCODE_API_KEY (not ANTHROPIC_API_KEY), KELOS_MODEL, GITHUB_TOKEN, GH_TOKEN, GH_CONFIG_DIR.
 	envMap := map[string]string{}
 	for _, env := range container.Env {
 		if env.Value != "" {
@@ -1257,10 +1279,13 @@ func TestBuildOpenCodeJob_WithWorkspace(t *testing.T) {
 			envMap[env.Name] = "(from-secret)"
 		}
 	}
-	for _, name := range []string{"KELOS_MODEL", "OPENCODE_API_KEY", "GITHUB_TOKEN", "GH_TOKEN"} {
+	for _, name := range []string{"KELOS_MODEL", "OPENCODE_API_KEY", "GITHUB_TOKEN", "GH_TOKEN", "GH_CONFIG_DIR"} {
 		if _, ok := envMap[name]; !ok {
 			t.Errorf("Expected env var %q to be set", name)
 		}
+	}
+	if envMap["GH_CONFIG_DIR"] != GHConfigDir {
+		t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, envMap["GH_CONFIG_DIR"])
 	}
 	if _, ok := envMap["ANTHROPIC_API_KEY"]; ok {
 		t.Error("ANTHROPIC_API_KEY should not be set for opencode agent type")
@@ -2625,8 +2650,8 @@ func TestBuildJob_BranchSetupWithSecretRefUsesCredentialHelper(t *testing.T) {
 	}
 
 	script := branchSetup.Command[2]
-	if !strings.Contains(script, "credential.helper") {
-		t.Error("Expected branch-setup script to include credential helper when secretRef is set")
+	if !strings.Contains(script, "-c credential.helper= -c credential.helper=") {
+		t.Error("Expected branch-setup script to clear inherited credential helpers before setting workspace helper")
 	}
 
 	// Verify GITHUB_TOKEN env var is present on branch-setup.
@@ -3815,5 +3840,140 @@ func TestBuildJob_PodFailurePolicy(t *testing.T) {
 	}
 	if len(rules[1].OnExitCodes.Values) != 1 || rules[1].OnExitCodes.Values[0] != 0 {
 		t.Errorf("Expected exit codes values [0], got %v", rules[1].OnExitCodes.Values)
+	}
+}
+
+func TestBuildJob_GHConfigDirNotSetWithoutSecretRef(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &kelosv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-no-secret",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the bug",
+			Credentials: kelosv1alpha1.Credentials{
+				Type:      kelosv1alpha1.CredentialTypeAPIKey,
+				SecretRef: kelosv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	for _, env := range container.Env {
+		if env.Name == "GH_CONFIG_DIR" {
+			t.Error("GH_CONFIG_DIR should not be set without workspace secretRef")
+		}
+	}
+}
+
+func TestBuildJob_CustomImageGetsGHConfigDir(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &kelosv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-custom-gh",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the bug",
+			Credentials: kelosv1alpha1.Credentials{
+				Type:      kelosv1alpha1.CredentialTypeAPIKey,
+				SecretRef: kelosv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			Image: "my-custom-agent:latest",
+		},
+	}
+
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		SecretRef: &kelosv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	container := job.Spec.Template.Spec.Containers[0]
+	if container.Image != "my-custom-agent:latest" {
+		t.Errorf("Expected custom image, got %q", container.Image)
+	}
+
+	var found bool
+	for _, env := range container.Env {
+		if env.Name == "GH_CONFIG_DIR" {
+			found = true
+			if env.Value != GHConfigDir {
+				t.Errorf("GH_CONFIG_DIR value: expected %q, got %q", GHConfigDir, env.Value)
+			}
+		}
+	}
+	if !found {
+		t.Error("Expected GH_CONFIG_DIR to be set for custom image with workspace secretRef")
+	}
+}
+
+func TestBuildJob_CredentialHelperClearsInheritedHelpers(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &kelosv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cred-clear",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the bug",
+			Credentials: kelosv1alpha1.Credentials{
+				Type:      kelosv1alpha1.CredentialTypeAPIKey,
+				SecretRef: kelosv1alpha1.SecretReference{Name: "my-secret"},
+			},
+		},
+	}
+
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/example/repo.git",
+		SecretRef: &kelosv1alpha1.SecretReference{
+			Name: "github-token",
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	initContainer := job.Spec.Template.Spec.InitContainers[0]
+	if len(initContainer.Command) != 3 || initContainer.Command[0] != "sh" {
+		t.Fatalf("Expected command [sh -c ...], got %v", initContainer.Command)
+	}
+	script := initContainer.Command[2]
+
+	// Clone must first clear inherited helpers then set the workspace helper.
+	if !strings.Contains(script, "credential.helper= -c credential.helper='") {
+		t.Error("Expected clone to clear then set credential helper")
+	}
+
+	// Persisted config must unset-all before adding the workspace helper.
+	if !strings.Contains(script, "--unset-all credential.helper") {
+		t.Error("Expected repo config to --unset-all credential.helper")
+	}
+	if !strings.Contains(script, `&& { git -C /workspace/repo config --unset-all credential.helper 2>/dev/null || true;`) {
+		t.Error("Expected repo helper persistence to be gated on a successful clone")
+	}
+	if !strings.Contains(script, "--add credential.helper") {
+		t.Error("Expected repo config to --add credential.helper")
 	}
 }
