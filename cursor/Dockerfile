@@ -43,8 +43,9 @@ RUN ARCH=$(uname -m) \
     && INSTALL_DIR="$HOME/.local/share/cursor-agent/versions/${CURSOR_CLI_VERSION}" \
     && mkdir -p "$INSTALL_DIR" "$HOME/.local/bin" \
     && curl -fsSL "https://downloads.cursor.com/lab/${CURSOR_CLI_VERSION}/linux/${ARCH}/agent-cli-package.tar.gz" \
-       | tar -xz -C "$INSTALL_DIR" \
-    && ln -sf "$INSTALL_DIR/agent" "$HOME/.local/bin/agent"
+       | tar --strip-components=1 -xz -C "$INSTALL_DIR" \
+    && ln -sf "$INSTALL_DIR/cursor-agent" "$HOME/.local/bin/agent" \
+    && ln -sf "$INSTALL_DIR/cursor-agent" "$HOME/.local/bin/cursor-agent"
 
 ENV GOPATH="/home/agent/go"
 ENV PATH="/home/agent/.local/bin:${GOPATH}/bin:${PATH}"
