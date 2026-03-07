@@ -71,6 +71,6 @@ var _ = BeforeSuite(func() {
 	githubToken = os.Getenv("GITHUB_TOKEN")
 
 	if oauthToken == "" && codexAuthJSON == "" && cursorAPIKey == "" {
-		Skip("No agent credentials set (CLAUDE_CODE_OAUTH_TOKEN, CODEX_AUTH_JSON, CURSOR_API_KEY), skipping e2e tests")
+		Fail("No agent credentials set (CLAUDE_CODE_OAUTH_TOKEN, CODEX_AUTH_JSON, CURSOR_API_KEY)")
 	}
 })
