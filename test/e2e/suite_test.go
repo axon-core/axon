@@ -54,7 +54,7 @@ var agentConfigs = []agentTestConfig{
 		SecretName:     "cursor-credentials",
 		SecretKey:      "CURSOR_API_KEY",
 		SecretValue:    &cursorAPIKey,
-		Model:          testModel,
+		Model:          "auto",
 		EnvVar:         "CURSOR_API_KEY",
 	},
 }
