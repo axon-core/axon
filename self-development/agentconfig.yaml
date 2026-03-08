@@ -29,3 +29,6 @@ spec:
     - Always try to add or improve tests when modifying code
     - Logging conventions: start log messages with capital letters and do not end with punctuation
     - Commit messages: do not include PR links in commit messages
+    - Pin container image tags: always use specific version tags (e.g., node:22.14.0-alpine), never rolling tags (e.g., node:22-alpine)
+    - GitHub Actions permissions: always add an explicit permissions block to workflow files, especially for pull_request_target triggers
+    - Use typed constants in Go tests: prefer typed constants from packages over string literals when constants exist
