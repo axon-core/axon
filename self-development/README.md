@@ -81,11 +81,9 @@ Picks up open GitHub issues labeled `actor/kelos` and creates autonomous agent t
 - Automatically checks for existing PRs and updates them incrementally
 - Self-reviews PRs before requesting human review
 - Ensures CI passes before completion
-- Labels issues with `kelos/needs-input` when human input is needed
-- Creates a feedback loop: remove the label to re-queue the issue
-- Supports manual reset via `/reset-worker` comment from a repository admin:
-  - Deletes `Task/kelos-workers-<ISSUE-NUMBER>` so it can be recreated with the same name
-  - Removes `kelos/needs-input` from the relevant issue and PR
+- Posts `/kelos needs-input` comment when human input is needed
+- Creates a feedback loop: comment `/reset-worker` to re-queue the issue
+- Supports manual reset via `/reset-worker` comment, which overrides the exclusion using "most recent command wins" semantics
 
 **Deploy:**
 ```bash
@@ -219,7 +217,10 @@ To adapt these examples for your own repository:
      when:
        githubIssues:
          labels: [your-label]        # Issues to pick up
-         excludeLabels: [wontfix]    # Issues to skip
+         excludeLabels: [wontfix]    # Issues to skip (label-based)
+         triggerComment: "/reset"    # Re-queue via comment (comment-based)
+         excludeComments:            # Exclude via comment (comment-based)
+           - "/needs-input"
          state: open                 # open, closed, or all
    ```
 
@@ -255,15 +256,17 @@ To adapt these examples for your own repository:
 
 ## Feedback Loop Pattern
 
-The key pattern in these examples is the `excludeLabels: [kelos/needs-input]` configuration. This creates an autonomous feedback loop:
+The kelos-workers spawner uses `excludeComments` and `triggerComment` to create an autonomous feedback loop:
 
-1. Agent picks up an open issue without the `kelos/needs-input` label
+1. Agent picks up an open issue (filtered by `triggerComment: "/reset-worker"` and `excludeComments`)
 2. Agent investigates, creates/updates a PR, and self-reviews
-3. If the agent needs human input, it adds the `kelos/needs-input` label
-4. The issue is excluded from future polls until a human removes the label
-5. Removing the label re-queues the issue on the next poll
+3. If the agent needs human input, it posts a `/kelos needs-input` comment on the issue
+4. The issue is excluded from future polls because the most recent matching comment is `/kelos needs-input`
+5. A maintainer comments `/reset-worker` to re-queue the issue (the "most recent command wins" semantics in `passesCommentFilter`)
 
-This allows agents to work fully autonomously while gracefully handing off to humans when needed.
+The kelos-triage spawner uses a label-based pattern (`excludeLabels: [kelos/needs-input]`) for its own feedback loop.
+
+Both patterns allow agents to work fully autonomously while gracefully handing off to humans when needed.
 
 ## Troubleshooting
 
