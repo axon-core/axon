@@ -20,7 +20,7 @@
 
 Kelos lets you **define your development workflow as YAML** and run it continuously on Kubernetes. Declare what triggers agents, what they do, and how they hand off — Kelos handles the rest.
 
-We use Kelos to develop Kelos. Six TaskSpawners run 24/7: triaging issues, fixing bugs, responding to PR feedback, testing DX, brainstorming improvements, and tuning their own prompts. [See the full pipeline below.](#kelos-developing-kelos)
+Kelos develops Kelos through six TaskSpawners run 24/7: triaging issues, fixing bugs, responding to PR feedback, testing DX, brainstorming improvements, and tuning their own prompts. [See the full pipeline below.](#kelos-developing-kelos)
 
 Supports **Claude Code**, **OpenAI Codex**, **Google Gemini**, **OpenCode**, **Cursor**, and [custom agent images](docs/agent-image-interface.md).
 
