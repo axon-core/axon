@@ -5,6 +5,10 @@ on:
     branches: [main]
     tags: ["v*"]
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
