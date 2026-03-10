@@ -88,7 +88,10 @@ jobs:
           ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
         with:
           script: |
-            const body = process.env.COMMAND_BODY || '';
+            const rawBody = process.env.COMMAND_BODY || '';
+            // Strip HTML comments so that example commands in PR
+            // templates (<!-- /kind bug -->) are not matched.
+            const body = rawBody.replace(/<!--[\s\S]*?-->/g, '');
             const issueNumber = Number(process.env.ISSUE_NUMBER || '0');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
