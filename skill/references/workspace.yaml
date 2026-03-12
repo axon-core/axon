@@ -1,0 +1,60 @@
+# Basic workspace with PAT authentication
+apiVersion: kelos.dev/v1alpha1
+kind: Workspace
+metadata:
+  name: my-workspace
+spec:
+  repo: https://github.com/my-org/my-repo.git
+  ref: main
+  secretRef:
+    name: github-token
+---
+# Workspace with GitHub App authentication (recommended for production)
+# Create the secret with:
+#   kubectl create secret generic github-app-creds \
+#     --from-literal=appID=12345 \
+#     --from-literal=installationID=67890 \
+#     --from-file=privateKey=my-app.private-key.pem
+apiVersion: kelos.dev/v1alpha1
+kind: Workspace
+metadata:
+  name: my-workspace-app
+spec:
+  repo: https://github.com/my-org/my-repo.git
+  ref: main
+  secretRef:
+    name: github-app-creds
+---
+# Fork workflow — workspace points to fork, with upstream remote
+apiVersion: kelos.dev/v1alpha1
+kind: Workspace
+metadata:
+  name: my-fork
+spec:
+  repo: https://github.com/my-user/forked-repo.git
+  ref: main
+  secretRef:
+    name: github-token
+  remotes:
+    - name: upstream
+      url: https://github.com/original-org/original-repo.git
+---
+# Workspace with injected files (skills, instructions)
+apiVersion: kelos.dev/v1alpha1
+kind: Workspace
+metadata:
+  name: workspace-with-files
+spec:
+  repo: https://github.com/my-org/my-repo.git
+  ref: main
+  secretRef:
+    name: github-token
+  files:
+    - path: CLAUDE.md
+      content: |
+        # Project Instructions
+        - Use pytest for testing
+        - Follow PEP 8 style
+    - path: .claude/skills/reviewer/SKILL.md
+      content: |
+        Review PRs for correctness and security.

@@ -1,0 +1,112 @@
+# Simple task with API key
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: simple-task
+spec:
+  type: claude-code
+  prompt: "Write a Python script that prints the first 20 Fibonacci numbers."
+  credentials:
+    type: api-key
+    secretRef:
+      name: anthropic-api-key
+---
+# Task with workspace (git repo) — using Codex agent
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: add-tests
+spec:
+  type: codex
+  prompt: "Add unit tests for all untested functions and open a PR."
+  credentials:
+    type: api-key
+    secretRef:
+      name: openai-api-key
+  workspaceRef:
+    name: my-workspace
+---
+# Task with AgentConfig, branch lock, and model override
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: review-pr
+spec:
+  type: claude-code
+  prompt: "Review the latest PR and provide feedback using /review."
+  model: opus
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  agentConfigRef:
+    name: code-reviewer
+  branch: feature/auth
+---
+# Task with dependencies — stage 2 waits for stage 1
+# Note: requires a "scaffold" Task defined separately (see examples/07-task-pipeline)
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: write-tests
+spec:
+  type: claude-code
+  prompt: |
+    Code is on branch {{index .Deps "scaffold" "Results" "branch"}}.
+    Write tests for the auth module. Commit and push.
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  branch: feature/auth
+  dependsOn:
+    - scaffold
+---
+# Task with pod overrides (resources, timeout, env, node selector)
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: heavy-task
+spec:
+  type: claude-code
+  prompt: "Refactor the entire test suite."
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  podOverrides:
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+    activeDeadlineSeconds: 3600
+    env:
+      - name: GIT_AUTHOR_NAME
+        value: "My Bot"
+      - name: GIT_AUTHOR_EMAIL
+        value: "bot@example.com"
+    nodeSelector:
+      cloud.google.com/gke-accelerator: nvidia-l4
+---
+# Task with TTL auto-cleanup
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: ephemeral-task
+spec:
+  type: claude-code
+  prompt: "Run the linter and report results."
+  credentials:
+    type: api-key
+    secretRef:
+      name: anthropic-api-key
+  ttlSecondsAfterFinished: 600

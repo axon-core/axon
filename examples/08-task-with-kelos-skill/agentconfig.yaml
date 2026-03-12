@@ -1,0 +1,42 @@
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: kelos-skill-agent
+spec:
+  # The kelos skill teaches agents how to author and debug Kelos resources.
+  # Point the skill content at the in-repo skill/SKILL.md file or inline it.
+  plugins:
+    - name: kelos
+      skills:
+        - name: kelos
+          content: |
+            Use this skill when you need to author, debug, or operate Kelos
+            resources (Task, Workspace, AgentConfig, TaskSpawner) on a
+            Kubernetes cluster.
+
+            Refer to the Kelos documentation and examples in the repository
+            for YAML patterns and CLI usage. Key resources:
+
+            - Task: a single agent run (prompt, credentials, workspace, config)
+            - Workspace: a git repository to clone
+            - AgentConfig: reusable instructions, skills, MCP servers
+            - TaskSpawner: auto-creates Tasks from GitHub issues, Jira, or cron
+
+            ## CLI Quick Reference
+
+            ```bash
+            kelos install                # Install CRDs and controller
+            kelos run -p "prompt"        # Run a task
+            kelos create workspace ...   # Create a workspace
+            kelos create agentconfig ... # Create an agent config
+            kelos get tasks              # List tasks
+            kelos logs <task> -f         # Stream task logs
+            ```
+
+            ## Troubleshooting
+
+            - Task stuck in Pending: check credentials secret or controller logs
+            - Task stuck in Waiting: check dependsOn or branch lock conflicts
+            - TaskSpawner not creating Tasks: check workspace exists,
+              maxConcurrency limit, or suspend flag
+            - Agent cannot push: verify GITHUB_TOKEN has repo permissions

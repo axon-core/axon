@@ -1,0 +1,91 @@
+# AgentConfig with instructions and inline plugin skills
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: code-reviewer
+spec:
+  agentsMD: |
+    # Code Review Guidelines
+    - Focus on correctness, readability, and security
+    - Flag any OWASP Top 10 vulnerabilities
+    - Suggest tests for untested code paths
+  plugins:
+    - name: reviewer
+      skills:
+        - name: review
+          content: |
+            Review the current PR diff for issues.
+            Focus on: correctness, security, performance, readability.
+            Post a summary as a PR comment using `gh pr comment`.
+      agents:
+        - name: security-checker
+          content: |
+            You are a security-focused sub-agent.
+            Scan the code for common vulnerabilities (injection, XSS, SSRF).
+            Report findings in a structured format.
+---
+# AgentConfig with skills.sh package
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: with-skills-sh
+spec:
+  skills:
+    - source: anthropics/skills
+      skill: skill-creator
+---
+# AgentConfig with MCP server (stdio transport)
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: with-mcp-stdio
+spec:
+  mcpServers:
+    - name: filesystem
+      type: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+      env:
+        NODE_ENV: production
+---
+# AgentConfig with MCP server (HTTP transport, secrets from Secret)
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: with-mcp-http
+spec:
+  mcpServers:
+    - name: github
+      type: http
+      url: https://api.githubcopilot.com/mcp/
+      headersFrom:
+        secretRef:
+          name: mcp-github-headers
+---
+# Combined: instructions, plugins, and MCP servers
+apiVersion: kelos.dev/v1alpha1
+kind: AgentConfig
+metadata:
+  name: full-config
+spec:
+  agentsMD: |
+    # Development Agent
+    - Always run tests before committing
+    - Use conventional commit messages
+  plugins:
+    - name: dev-tools
+      skills:
+        - name: test
+          content: |
+            Run the project test suite and report results.
+            Use `make test` if a Makefile exists, otherwise detect the framework.
+        - name: lint
+          content: |
+            Run linters and fix any issues found.
+  mcpServers:
+    - name: github
+      type: http
+      url: https://api.githubcopilot.com/mcp/
+      headersFrom:
+        secretRef:
+          name: mcp-github-headers

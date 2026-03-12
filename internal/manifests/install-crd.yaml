@@ -145,18 +145,21 @@ spec:
                 type: array
               plugins:
                 description: |-
-                  Plugins defines Claude Code plugins to inject via --plugin-dir.
-                  Each plugin is mounted as a separate plugin directory.
-                  Only applicable to claude-code type agents; other agents ignore this.
+                  Plugins defines plugin bundles containing skills and agents.
+                  Each plugin is mounted as a directory and installed using the
+                  agent's native mechanism (e.g., --plugin-dir for Claude Code,
+                  ~/.codex/skills for Codex, extensions for Gemini).
                 items:
-                  description: PluginSpec defines a Claude Code plugin bundle.
+                  description: PluginSpec defines a plugin bundle containing skills
+                    and agents.
                   properties:
                     agents:
                       description: |-
                         Agents defines sub-agents for this plugin.
                         Each becomes agents/<name>.md in the plugin directory.
                       items:
-                        description: AgentDefinition defines a Claude Code sub-agent.
+                        description: AgentDefinition defines a sub-agent within a
+                          plugin.
                         properties:
                           content:
                             type: string
@@ -179,8 +182,7 @@ spec:
                         Skills defines skills for this plugin.
                         Each becomes skills/<name>/SKILL.md in the plugin directory.
                       items:
-                        description: SkillDefinition defines a Claude Code skill (slash
-                          command).
+                        description: SkillDefinition defines a skill within a plugin.
                         properties:
                           content:
                             type: string
@@ -201,7 +203,6 @@ spec:
                   Skills defines skills.sh packages to install into the plugin volume.
                   Each entry references a package in owner/repo format from the skills.sh
                   ecosystem, installed via "npx skills add" in an init container.
-                  Only applicable to claude-code type agents; other agents ignore this.
                 items:
                   description: SkillsShSpec defines a skills.sh package reference.
                   properties:

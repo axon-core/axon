@@ -1,0 +1,152 @@
+# TaskSpawner triggered by GitHub issues with specific labels
+apiVersion: kelos.dev/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: fix-bugs
+spec:
+  when:
+    githubIssues:
+      labels:
+        - bug
+      excludeLabels:
+        - wontfix
+      state: open
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-workspace
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    branch: "fix-{{.Number}}"
+    promptTemplate: |
+      Fix the following GitHub issue and open a PR.
+
+      Issue #{{.Number}}: {{.Title}}
+
+      {{.Body}}
+    ttlSecondsAfterFinished: 3600
+  pollInterval: 5m
+  maxConcurrency: 3
+---
+# TaskSpawner with cron schedule
+apiVersion: kelos.dev/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: daily-audit
+spec:
+  when:
+    cron:
+      schedule: "0 9 * * 1-5"
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-workspace
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    promptTemplate: |
+      Run a security audit on the codebase.
+      Triggered at: {{.Time}}
+    ttlSecondsAfterFinished: 7200
+  maxConcurrency: 1
+---
+# Fork workflow — discover upstream issues, work in a fork
+apiVersion: kelos.dev/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: fork-worker
+spec:
+  when:
+    githubIssues:
+      repo: https://github.com/upstream-org/upstream-repo.git
+      labels:
+        - help-wanted
+      state: open
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-fork
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    branch: "kelos-task-{{.Number}}"
+    promptTemplate: |
+      Fix this upstream issue and open a PR from the fork.
+
+      Issue #{{.Number}}: {{.Title}}
+
+      {{.Body}}
+    ttlSecondsAfterFinished: 3600
+  pollInterval: 5m
+  maxConcurrency: 3
+---
+# TaskSpawner with comment-based triggers and priority labels
+apiVersion: kelos.dev/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: comment-triggered
+spec:
+  when:
+    githubIssues:
+      labels:
+        - agent-ready
+      triggerComment: "/kelos pick-up"
+      excludeComments:
+        - "/kelos needs-input"
+      priorityLabels:
+        - priority/critical-urgent
+        - priority/important-soon
+        - priority/backlog
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-workspace
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    agentConfigRef:
+      name: my-agent-config
+    branch: "kelos-task-{{.Number}}"
+    promptTemplate: |
+      Fix issue #{{.Number}}: {{.Title}}
+
+      {{.Body}}
+
+      Comments:
+      {{.Comments}}
+  pollInterval: 1m
+  maxConcurrency: 5
+  maxTotalTasks: 100
+---
+# TaskSpawner with Jira source
+apiVersion: kelos.dev/v1alpha1
+kind: TaskSpawner
+metadata:
+  name: jira-worker
+spec:
+  when:
+    jira:
+      baseUrl: https://mycompany.atlassian.net
+      project: PROJ
+      jql: "status = 'To Do' AND priority in (High, Critical)"
+      secretRef:
+        name: jira-credentials
+  taskTemplate:
+    type: claude-code
+    workspaceRef:
+      name: my-workspace
+    credentials:
+      type: oauth
+      secretRef:
+        name: claude-oauth-token
+    promptTemplate: |
+      Fix Jira ticket {{.ID}}: {{.Title}}
+
+      {{.Body}}
+  pollInterval: 10m
+  maxConcurrency: 2

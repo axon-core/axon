@@ -25,9 +25,9 @@ duplicating instructions in every Task prompt.
 - **`agentsMD`** is written to the agent's instruction file (e.g.,
   `~/.claude/CLAUDE.md` for Claude Code) before the agent starts. This is
   additive and does not overwrite the repo's own instruction files.
-- **`plugins`** are mounted as plugin directories and passed via `--plugin-dir`.
-  Each plugin can define skills (slash commands) and agents (sub-agents). Only
-  applicable to `claude-code` type agents.
+- **`plugins`** are mounted as plugin directories and installed using each
+  agent's native mechanism (e.g., `--plugin-dir` for Claude Code,
+  `~/.codex/skills` for Codex, extensions for Gemini).
 
 ## Steps
 
@@ -70,5 +70,5 @@ kubectl delete -f examples/05-task-with-agentconfig/
   until it becomes available.
 - You can reuse the same AgentConfig across multiple Tasks by setting
   `agentConfigRef.name` in each Task spec.
-- Plugins are only supported for `claude-code` type agents. Other agent types
-  will use `agentsMD` but ignore the `plugins` field.
+- Plugins are supported across all agent types. Each agent installs skills
+  using its native mechanism.

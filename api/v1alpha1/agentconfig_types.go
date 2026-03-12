@@ -12,16 +12,16 @@ type AgentConfigSpec struct {
 	// +optional
 	AgentsMD string `json:"agentsMD,omitempty"`
 
-	// Plugins defines Claude Code plugins to inject via --plugin-dir.
-	// Each plugin is mounted as a separate plugin directory.
-	// Only applicable to claude-code type agents; other agents ignore this.
+	// Plugins defines plugin bundles containing skills and agents.
+	// Each plugin is mounted as a directory and installed using the
+	// agent's native mechanism (e.g., --plugin-dir for Claude Code,
+	// ~/.codex/skills for Codex, extensions for Gemini).
 	// +optional
 	Plugins []PluginSpec `json:"plugins,omitempty"`
 
 	// Skills defines skills.sh packages to install into the plugin volume.
 	// Each entry references a package in owner/repo format from the skills.sh
 	// ecosystem, installed via "npx skills add" in an init container.
-	// Only applicable to claude-code type agents; other agents ignore this.
 	// +optional
 	Skills []SkillsShSpec `json:"skills,omitempty"`
 
@@ -32,7 +32,7 @@ type AgentConfigSpec struct {
 	MCPServers []MCPServerSpec `json:"mcpServers,omitempty"`
 }
 
-// PluginSpec defines a Claude Code plugin bundle.
+// PluginSpec defines a plugin bundle containing skills and agents.
 type PluginSpec struct {
 	// Name is the plugin name. Used as the plugin directory name
 	// and for namespacing in Claude Code (e.g., <name>:skill-name).
@@ -50,14 +50,14 @@ type PluginSpec struct {
 	Agents []AgentDefinition `json:"agents,omitempty"`
 }
 
-// SkillDefinition defines a Claude Code skill (slash command).
+// SkillDefinition defines a skill within a plugin.
 type SkillDefinition struct {
 	// +kubebuilder:validation:MinLength=1
 	Name    string `json:"name"`
 	Content string `json:"content"`
 }
 
-// AgentDefinition defines a Claude Code sub-agent.
+// AgentDefinition defines a sub-agent within a plugin.
 type AgentDefinition struct {
 	// +kubebuilder:validation:MinLength=1
 	Name    string `json:"name"`

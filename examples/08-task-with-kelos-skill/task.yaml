@@ -1,0 +1,18 @@
+apiVersion: kelos.dev/v1alpha1
+kind: Task
+metadata:
+  name: setup-kelos-workflow
+spec:
+  type: claude-code
+  prompt: |
+    Using the /kelos skill, create a TaskSpawner that monitors GitHub issues
+    labeled "agent" and automatically creates Tasks to fix them.
+    Include a Workspace and AgentConfig. Apply the resources to the cluster.
+  credentials:
+    type: oauth
+    secretRef:
+      name: claude-oauth-token
+  workspaceRef:
+    name: my-workspace
+  agentConfigRef:
+    name: kelos-skill-agent
