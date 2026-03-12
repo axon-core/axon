@@ -600,6 +600,13 @@ spec:
                 - opencode
                 - cursor
                 type: string
+              upstreamRepo:
+                description: |-
+                  UpstreamRepo is the upstream repository in "owner/repo" format.
+                  When set, the KELOS_UPSTREAM_REPO environment variable is injected
+                  into the agent container so that post-run PR capture and gh CLI
+                  operations target the correct repository in fork workflows.
+                type: string
               workspaceRef:
                 description: WorkspaceRef optionally references a Workspace resource
                   for the agent to work in.
@@ -1085,6 +1092,14 @@ spec:
                     - gemini
                     - opencode
                     - cursor
+                    type: string
+                  upstreamRepo:
+                    description: |-
+                      UpstreamRepo is the upstream repository in "owner/repo" format.
+                      When set, spawned Tasks inherit this value and inject
+                      KELOS_UPSTREAM_REPO into the agent container. This is typically
+                      derived automatically from githubIssues.repo or
+                      githubPullRequests.repo by the spawner, but can be set explicitly.
                     type: string
                   workspaceRef:
                     description: |-

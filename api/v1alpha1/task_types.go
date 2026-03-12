@@ -115,6 +115,13 @@ type TaskSpec struct {
 	// +optional
 	Branch string `json:"branch,omitempty"`
 
+	// UpstreamRepo is the upstream repository in "owner/repo" format.
+	// When set, the KELOS_UPSTREAM_REPO environment variable is injected
+	// into the agent container so that post-run PR capture and gh CLI
+	// operations target the correct repository in fork workflows.
+	// +optional
+	UpstreamRepo string `json:"upstreamRepo,omitempty"`
+
 	// TTLSecondsAfterFinished limits the lifetime of a Task that has finished
 	// execution (either Succeeded or Failed). If set, the Task will be
 	// automatically deleted after the given number of seconds once it reaches

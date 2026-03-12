@@ -284,6 +284,14 @@ type TaskTemplate struct {
 	// PodOverrides allows customizing the agent pod configuration for spawned Tasks.
 	// +optional
 	PodOverrides *PodOverrides `json:"podOverrides,omitempty"`
+
+	// UpstreamRepo is the upstream repository in "owner/repo" format.
+	// When set, spawned Tasks inherit this value and inject
+	// KELOS_UPSTREAM_REPO into the agent container. This is typically
+	// derived automatically from githubIssues.repo or
+	// githubPullRequests.repo by the spawner, but can be set explicitly.
+	// +optional
+	UpstreamRepo string `json:"upstreamRepo,omitempty"`
 }
 
 // TaskSpawnerSpec defines the desired state of TaskSpawner.

@@ -274,7 +274,14 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 			})
 		}
 
-		if upstreamRepo := upstreamRepoEnvValue(effectiveRemotes); upstreamRepo != "" {
+		// Derive upstream repo: prefer the explicit task-level override
+		// (set by the spawner from githubIssues.repo / githubPullRequests.repo),
+		// then fall back to parsing workspace remotes named "upstream".
+		upstreamRepo := task.Spec.UpstreamRepo
+		if upstreamRepo == "" {
+			upstreamRepo = upstreamRepoEnvValue(effectiveRemotes)
+		}
+		if upstreamRepo != "" {
 			envVars = append(envVars, corev1.EnvVar{
 				Name:  "KELOS_UPSTREAM_REPO",
 				Value: upstreamRepo,

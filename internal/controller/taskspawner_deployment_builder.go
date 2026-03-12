@@ -72,7 +72,15 @@ func (b *DeploymentBuilder) buildPodParts(ts *kelosv1alpha1.TaskSpawner, workspa
 
 		// Override with an explicit GitHub source repo if set (fork workflow).
 		if repoOverride := githubSourceRepoOverride(ts); repoOverride != "" {
-			host, owner, repo = parseGitHubRepo(repoOverride)
+			overrideHost, overrideOwner, overrideRepo := parseGitHubRepo(repoOverride)
+			owner = overrideOwner
+			repo = overrideRepo
+			// Only override the host when the override itself provides one.
+			// Shorthand "owner/repo" returns an empty host from parseGitHubRepo;
+			// in that case keep the workspace host so GHES API URLs are preserved.
+			if overrideHost != "" {
+				host = overrideHost
+			}
 		}
 
 		args = append(args,

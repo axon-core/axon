@@ -682,6 +682,136 @@ func TestBuildDeploymentWithGitHubPullRequestsRepoOverride(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentWithGitHubIssuesShorthandRepoOverridePreservesGHESHost(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{
+					Repo: "upstream-org/upstream-repo",
+				},
+			},
+		},
+	}
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.example.com/my-fork/upstream-repo.git",
+	}
+
+	deploy := builder.Build(ts, workspace, false)
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+
+	foundOwner := false
+	foundRepo := false
+	foundAPIBaseURL := ""
+	for _, arg := range args {
+		if arg == "--github-owner=upstream-org" {
+			foundOwner = true
+		}
+		if arg == "--github-repo=upstream-repo" {
+			foundRepo = true
+		}
+		if strings.HasPrefix(arg, "--github-api-base-url=") {
+			foundAPIBaseURL = arg
+		}
+	}
+	if !foundOwner {
+		t.Errorf("expected --github-owner=upstream-org, got args: %v", args)
+	}
+	if !foundRepo {
+		t.Errorf("expected --github-repo=upstream-repo, got args: %v", args)
+	}
+	want := "--github-api-base-url=https://github.example.com/api/v3"
+	if foundAPIBaseURL != want {
+		t.Errorf("GHES host should be preserved from workspace; got %q, want %q", foundAPIBaseURL, want)
+	}
+}
+
+func TestBuildDeploymentWithGitHubPullRequestsShorthandRepoOverridePreservesGHESHost(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubPullRequests: &kelosv1alpha1.GitHubPullRequests{
+					Repo: "upstream-org/upstream-repo",
+				},
+			},
+		},
+	}
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.example.com/my-fork/upstream-repo.git",
+	}
+
+	deploy := builder.Build(ts, workspace, false)
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+
+	foundOwner := false
+	foundRepo := false
+	foundAPIBaseURL := ""
+	for _, arg := range args {
+		if arg == "--github-owner=upstream-org" {
+			foundOwner = true
+		}
+		if arg == "--github-repo=upstream-repo" {
+			foundRepo = true
+		}
+		if strings.HasPrefix(arg, "--github-api-base-url=") {
+			foundAPIBaseURL = arg
+		}
+	}
+	if !foundOwner {
+		t.Errorf("expected --github-owner=upstream-org, got args: %v", args)
+	}
+	if !foundRepo {
+		t.Errorf("expected --github-repo=upstream-repo, got args: %v", args)
+	}
+	want := "--github-api-base-url=https://github.example.com/api/v3"
+	if foundAPIBaseURL != want {
+		t.Errorf("GHES host should be preserved from workspace; got %q, want %q", foundAPIBaseURL, want)
+	}
+}
+
+func TestBuildDeploymentWithFullURLOverrideReplacesGHESHost(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{
+					Repo: "https://other-ghes.example.com/upstream-org/upstream-repo.git",
+				},
+			},
+		},
+	}
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.example.com/my-fork/upstream-repo.git",
+	}
+
+	deploy := builder.Build(ts, workspace, false)
+	args := deploy.Spec.Template.Spec.Containers[0].Args
+
+	foundAPIBaseURL := ""
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--github-api-base-url=") {
+			foundAPIBaseURL = arg
+		}
+	}
+	want := "--github-api-base-url=https://other-ghes.example.com/api/v3"
+	if foundAPIBaseURL != want {
+		t.Errorf("full URL override should replace GHES host; got %q, want %q", foundAPIBaseURL, want)
+	}
+}
+
 func TestDeploymentBuilder_JiraNoJQL(t *testing.T) {
 	builder := NewDeploymentBuilder()
 	ts := &kelosv1alpha1.TaskSpawner{

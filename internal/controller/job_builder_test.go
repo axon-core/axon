@@ -4155,3 +4155,94 @@ func TestBuildJob_CredentialHelperClearsInheritedHelpers(t *testing.T) {
 		t.Error("Expected repo config to --add credential.helper")
 	}
 }
+
+func TestBuildJob_UpstreamRepoSpecOverridesRemote(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &kelosv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-upstream-override",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the code",
+			Credentials: kelosv1alpha1.Credentials{
+				Type:      kelosv1alpha1.CredentialTypeAPIKey,
+				SecretRef: kelosv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			UpstreamRepo: "override-org/override-repo",
+		},
+	}
+
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/repo.git",
+		Ref:  "main",
+		Remotes: []kelosv1alpha1.GitRemote{
+			{Name: "upstream", URL: "https://github.com/remote-org/repo.git"},
+		},
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	found := false
+	for _, env := range mainContainer.Env {
+		if env.Name == "KELOS_UPSTREAM_REPO" {
+			found = true
+			if env.Value != "override-org/override-repo" {
+				t.Errorf("KELOS_UPSTREAM_REPO = %q, want %q", env.Value, "override-org/override-repo")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected KELOS_UPSTREAM_REPO env var on main container")
+	}
+}
+
+func TestBuildJob_UpstreamRepoSpecWithoutRemote(t *testing.T) {
+	builder := NewJobBuilder()
+	task := &kelosv1alpha1.Task{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-upstream-no-remote",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpec{
+			Type:   AgentTypeClaudeCode,
+			Prompt: "Fix the code",
+			Credentials: kelosv1alpha1.Credentials{
+				Type:      kelosv1alpha1.CredentialTypeAPIKey,
+				SecretRef: kelosv1alpha1.SecretReference{Name: "my-secret"},
+			},
+			UpstreamRepo: "upstream-org/upstream-repo",
+		},
+	}
+
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/my-fork/repo.git",
+		Ref:  "main",
+	}
+
+	job, err := builder.Build(task, workspace, nil, task.Spec.Prompt)
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+
+	mainContainer := job.Spec.Template.Spec.Containers[0]
+	found := false
+	for _, env := range mainContainer.Env {
+		if env.Name == "KELOS_UPSTREAM_REPO" {
+			found = true
+			if env.Value != "upstream-org/upstream-repo" {
+				t.Errorf("KELOS_UPSTREAM_REPO = %q, want %q", env.Value, "upstream-org/upstream-repo")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected KELOS_UPSTREAM_REPO env var on main container")
+	}
+}
