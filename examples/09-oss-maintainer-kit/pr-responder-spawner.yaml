@@ -10,6 +10,7 @@ spec:
       triggerComment: /bot update
       excludeComments:
         - /bot needs-input
+        - /bot done
   maxConcurrency: 2
   taskTemplate:
     type: claude-code
@@ -49,3 +50,5 @@ spec:
       Rules:
       - Make incremental changes — do NOT rewrite from scratch
       - If you need maintainer input, post "/bot needs-input" and explain why
+      - After completing the update, post "/bot done" as a separate comment on
+        the PR so the spawner does not re-trigger
