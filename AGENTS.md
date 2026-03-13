@@ -22,7 +22,7 @@
 - Fill in every section of the template. Do not remove or skip sections — use "N/A" or "NONE" where appropriate.
 - Choose exactly one `/kind` label from: `bug`, `cleanup`, `docs`, `feature`.
 - If there is no associated issue, write "N/A" under the issue section.
-- If the PR does not introduce a user-facing change, write "NONE" in the `release-note` block.
+- If the PR does not introduce a user-facing change, write "NONE" in the `release-note` block. If the PR introduces new API fields, user-facing features, or behavioral changes, describe them in the `release-note` block.
 
 ## Directory Structure
 - `cmd/` — CLI entrypoints
