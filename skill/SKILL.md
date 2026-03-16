@@ -82,9 +82,16 @@ An AgentConfig injects reusable instructions and tools into Tasks:
 
 A TaskSpawner auto-creates Tasks from external sources:
 
-- `spec.when.githubIssues`: Discover from GitHub (labels, state, assignee, author, trigger/exclude comments, priority labels)
+- `spec.when.githubIssues`: Discover from GitHub issues (labels, state, assignee, author, commentPolicy, priority labels)
+- `spec.when.githubPullRequests`: Discover from GitHub PRs (labels, state, reviewState, author, draft, commentPolicy, priority labels)
 - `spec.when.cron`: Trigger on a cron schedule
 - `spec.when.jira`: Discover from Jira (project, JQL filter, secret with `JIRA_TOKEN`)
+- `spec.when.githubIssues.commentPolicy` / `spec.when.githubPullRequests.commentPolicy`: Comment-based workflow control with authorization
+  - `triggerComment`: Command that must appear for the item to be included (e.g., "/kelos pick-up")
+  - `excludeComments`: Commands that exclude items; when combined with triggerComment, the most recent authorized command wins
+  - `allowedUsers`: Restrict comment control to specific GitHub usernames
+  - `allowedTeams`: Restrict to GitHub teams in `org/team-slug` format
+  - `minimumPermission`: Require at least this repo permission (`read`, `triage`, `write`, `maintain`, `admin`)
 - `spec.taskTemplate`: Template for spawned Tasks (same fields as Task spec)
   - `promptTemplate` and `branch` support Go `text/template` variables: `{{.ID}}`, `{{.Number}}`, `{{.Title}}`, `{{.Body}}`, `{{.URL}}`, `{{.Labels}}`, `{{.Comments}}`, `{{.Kind}}`, `{{.Time}}`, `{{.Schedule}}`
 - `spec.pollInterval`: Polling frequency (default `5m`)

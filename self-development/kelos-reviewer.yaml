@@ -37,10 +37,14 @@ spec:
   when:
     githubPullRequests:
       state: open
-      triggerComment: /kelos review
+      commentPolicy:
+        triggerComment: /kelos review
+        excludeComments:
+          - /kelos needs-input
+        allowedUsers:
+          - gjkim42
+          - kelos-bot[bot]
       draft: false
-      excludeComments:
-        - /kelos needs-input
       reporting:
         enabled: true
   maxConcurrency: 3

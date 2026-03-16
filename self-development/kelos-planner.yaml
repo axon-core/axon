@@ -28,9 +28,13 @@ spec:
   when:
     githubIssues:
       state: open
-      triggerComment: "/kelos plan"
-      excludeComments:
-        - "/kelos needs-input"
+      commentPolicy:
+        triggerComment: "/kelos plan"
+        excludeComments:
+          - "/kelos needs-input"
+        allowedUsers:
+          - gjkim42
+          - kelos-bot[bot]
       reporting:
         enabled: true
   maxConcurrency: 2

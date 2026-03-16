@@ -6,9 +6,13 @@ spec:
   when:
     githubPullRequests:
       state: open
-      triggerComment: /kelos squash-commits
-      excludeComments:
-        - /kelos squash-commits-done
+      commentPolicy:
+        triggerComment: /kelos squash-commits
+        excludeComments:
+          - /kelos squash-commits-done
+        allowedUsers:
+          - gjkim42
+          - kelos-bot[bot]
       reporting:
         enabled: true
   maxConcurrency: 1

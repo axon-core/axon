@@ -39,9 +39,13 @@ spec:
     githubIssues:
       labels:
         - actor/kelos
-      triggerComment: "/kelos pick-up"
-      excludeComments:
-        - "/kelos needs-input"
+      commentPolicy:
+        triggerComment: "/kelos pick-up"
+        excludeComments:
+          - "/kelos needs-input"
+        allowedUsers:
+          - gjkim42
+          - kelos-bot[bot]
       reporting:
         enabled: true
       priorityLabels:

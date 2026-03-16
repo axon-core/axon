@@ -8,10 +8,14 @@ spec:
       labels:
         - generated-by-kelos
       state: open
-      triggerComment: /kelos pick-up
+      commentPolicy:
+        triggerComment: /kelos pick-up
+        excludeComments:
+          - /kelos needs-input
+        allowedUsers:
+          - gjkim42
+          - kelos-bot[bot]
       draft: false
-      excludeComments:
-        - /kelos needs-input
       reporting:
         enabled: true
   maxConcurrency: 2

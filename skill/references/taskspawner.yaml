@@ -84,7 +84,7 @@ spec:
   pollInterval: 5m
   maxConcurrency: 3
 ---
-# TaskSpawner with comment-based triggers and priority labels
+# TaskSpawner with comment-based triggers, authorization, and priority labels
 apiVersion: kelos.dev/v1alpha1
 kind: TaskSpawner
 metadata:
@@ -94,9 +94,13 @@ spec:
     githubIssues:
       labels:
         - agent-ready
-      triggerComment: "/kelos pick-up"
-      excludeComments:
-        - "/kelos needs-input"
+      commentPolicy:
+        triggerComment: "/kelos pick-up"
+        excludeComments:
+          - "/kelos needs-input"
+        allowedUsers:
+          - my-github-username
+        minimumPermission: write
       priorityLabels:
         - priority/critical-urgent
         - priority/important-soon
