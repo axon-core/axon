@@ -143,14 +143,14 @@ func printTaskSpawnerTable(w io.Writer, spawners []kelosv1alpha1.TaskSpawner, al
 		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
 		source := ""
 		if s.Spec.When.GitHubIssues != nil {
-			if s.Spec.TaskTemplate != nil && s.Spec.TaskTemplate.WorkspaceRef != nil {
-				source = s.Spec.TaskTemplate.WorkspaceRef.Name
+			if wsRef := taskSpawnerWorkspaceRef(&s); wsRef != nil {
+				source = wsRef.Name
 			} else {
 				source = "GitHub Issues"
 			}
 		} else if s.Spec.When.GitHubPullRequests != nil {
-			if s.Spec.TaskTemplate != nil && s.Spec.TaskTemplate.WorkspaceRef != nil {
-				source = s.Spec.TaskTemplate.WorkspaceRef.Name
+			if wsRef := taskSpawnerWorkspaceRef(&s); wsRef != nil {
+				source = wsRef.Name
 			} else {
 				source = "GitHub Pull Requests"
 			}
@@ -176,8 +176,8 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 	printField(w, "Name", ts.Name)
 	printField(w, "Namespace", ts.Namespace)
 	printField(w, "Phase", string(ts.Status.Phase))
-	if ts.Spec.TaskTemplate != nil && ts.Spec.TaskTemplate.WorkspaceRef != nil {
-		printField(w, "Workspace", ts.Spec.TaskTemplate.WorkspaceRef.Name)
+	if wsRef := taskSpawnerWorkspaceRef(ts); wsRef != nil {
+		printField(w, "Workspace", wsRef.Name)
 	}
 	if ts.Spec.When.GitHubIssues != nil {
 		gh := ts.Spec.When.GitHubIssues
@@ -375,4 +375,19 @@ func printJSON(w io.Writer, obj interface{}) error {
 	}
 	_, err = fmt.Fprintln(w, string(data))
 	return err
+}
+
+// taskSpawnerWorkspaceRef returns the first WorkspaceReference found in the
+// TaskSpawner spec — either from taskTemplate or the first taskTemplates
+// entry that has one.
+func taskSpawnerWorkspaceRef(ts *kelosv1alpha1.TaskSpawner) *kelosv1alpha1.WorkspaceReference {
+	if ts.Spec.TaskTemplate != nil && ts.Spec.TaskTemplate.WorkspaceRef != nil {
+		return ts.Spec.TaskTemplate.WorkspaceRef
+	}
+	for i := range ts.Spec.TaskTemplates {
+		if ts.Spec.TaskTemplates[i].WorkspaceRef != nil {
+			return ts.Spec.TaskTemplates[i].WorkspaceRef
+		}
+	}
+	return nil
 }

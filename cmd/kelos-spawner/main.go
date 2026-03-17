@@ -271,7 +271,10 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 
 	var newItems []source.WorkItem
 	// In pipeline mode, track how many steps are missing per item for budget calculation.
-	missingStepsPerItem := make(map[string]int)
+	var missingStepsPerItem map[string]int
+	if pipelineMode {
+		missingStepsPerItem = make(map[string]int)
+	}
 	for _, item := range items {
 		if pipelineMode {
 			// In pipeline mode, check if any step is missing for this item.
