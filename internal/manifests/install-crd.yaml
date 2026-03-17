@@ -817,6 +817,7 @@ spec:
                       on.
                     items:
                       type: string
+                    maxItems: 10
                     type: array
                   image:
                     description: |-
@@ -1184,6 +1185,7 @@ spec:
                         on.
                       items:
                         type: string
+                      maxItems: 10
                       type: array
                     image:
                       description: |-
@@ -1198,6 +1200,7 @@ spec:
                       description: |-
                         Name is the step name within the pipeline, used for task name suffix
                         and as a reference target for other steps' dependsOn.
+                      maxLength: 63
                       minLength: 1
                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
@@ -1497,6 +1500,7 @@ spec:
                   - name
                   - type
                   type: object
+                maxItems: 10
                 minItems: 1
                 type: array
               when:
@@ -1857,11 +1861,11 @@ spec:
                 || (has(self.taskTemplate) && has(self.taskTemplate.workspaceRef))
                 || (has(self.taskTemplates) && self.taskTemplates.exists(t, has(t.workspaceRef)))'
             - message: taskTemplates step names must be unique
-              rule: '!has(self.taskTemplates) || self.taskTemplates.map(t, t.name).size()
-                == self.taskTemplates.map(t, t.name).toSet().size()'
+              rule: '!has(self.taskTemplates) || self.taskTemplates.all(t, self.taskTemplates.exists_one(s,
+                s.name == t.name))'
             - message: taskTemplates dependsOn must reference existing step names
               rule: '!has(self.taskTemplates) || self.taskTemplates.all(t, !has(t.dependsOn)
-                || t.dependsOn.all(d, d in self.taskTemplates.map(s, s.name)))'
+                || t.dependsOn.all(d, self.taskTemplates.exists(s, s.name == d)))'
             - message: taskTemplates steps must not depend on themselves
               rule: '!has(self.taskTemplates) || self.taskTemplates.all(t, !has(t.dependsOn)
                 || !t.dependsOn.exists(d, d == t.name))'

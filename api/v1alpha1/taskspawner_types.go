@@ -330,6 +330,7 @@ type TaskTemplate struct {
 
 	// DependsOn lists Task names that spawned Tasks depend on.
 	// +optional
+	// +kubebuilder:validation:MaxItems=10
 	DependsOn []string `json:"dependsOn,omitempty"`
 
 	// Branch is the git branch spawned Tasks should work on.
@@ -382,6 +383,7 @@ type NamedTaskTemplate struct {
 	// and as a reference target for other steps' dependsOn.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Name string `json:"name"`
 
@@ -391,8 +393,8 @@ type NamedTaskTemplate struct {
 // TaskSpawnerSpec defines the desired state of TaskSpawner.
 // +kubebuilder:validation:XValidation:rule="has(self.taskTemplate) != has(self.taskTemplates)",message="exactly one of taskTemplate or taskTemplates must be set"
 // +kubebuilder:validation:XValidation:rule="!(has(self.when.githubIssues) || has(self.when.githubPullRequests)) || (has(self.taskTemplate) && has(self.taskTemplate.workspaceRef)) || (has(self.taskTemplates) && self.taskTemplates.exists(t, has(t.workspaceRef)))",message="workspaceRef is required when using githubIssues or githubPullRequests source"
-// +kubebuilder:validation:XValidation:rule="!has(self.taskTemplates) || self.taskTemplates.map(t, t.name).size() == self.taskTemplates.map(t, t.name).toSet().size()",message="taskTemplates step names must be unique"
-// +kubebuilder:validation:XValidation:rule="!has(self.taskTemplates) || self.taskTemplates.all(t, !has(t.dependsOn) || t.dependsOn.all(d, d in self.taskTemplates.map(s, s.name)))",message="taskTemplates dependsOn must reference existing step names"
+// +kubebuilder:validation:XValidation:rule="!has(self.taskTemplates) || self.taskTemplates.all(t, self.taskTemplates.exists_one(s, s.name == t.name))",message="taskTemplates step names must be unique"
+// +kubebuilder:validation:XValidation:rule="!has(self.taskTemplates) || self.taskTemplates.all(t, !has(t.dependsOn) || t.dependsOn.all(d, self.taskTemplates.exists(s, s.name == d)))",message="taskTemplates dependsOn must reference existing step names"
 // +kubebuilder:validation:XValidation:rule="!has(self.taskTemplates) || self.taskTemplates.all(t, !has(t.dependsOn) || !t.dependsOn.exists(d, d == t.name))",message="taskTemplates steps must not depend on themselves"
 type TaskSpawnerSpec struct {
 	// When defines the conditions that trigger task spawning.
@@ -410,6 +412,7 @@ type TaskSpawnerSpec struct {
 	// Exactly one of taskTemplate or taskTemplates must be set.
 	// +optional
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=10
 	TaskTemplates []NamedTaskTemplate `json:"taskTemplates,omitempty"`
 
 	// PollInterval is how often to poll the source for new items (e.g., "5m"). Defaults to "5m".
