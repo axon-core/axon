@@ -143,13 +143,13 @@ func printTaskSpawnerTable(w io.Writer, spawners []kelosv1alpha1.TaskSpawner, al
 		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
 		source := ""
 		if s.Spec.When.GitHubIssues != nil {
-			if s.Spec.TaskTemplate.WorkspaceRef != nil {
+			if s.Spec.TaskTemplate != nil && s.Spec.TaskTemplate.WorkspaceRef != nil {
 				source = s.Spec.TaskTemplate.WorkspaceRef.Name
 			} else {
 				source = "GitHub Issues"
 			}
 		} else if s.Spec.When.GitHubPullRequests != nil {
-			if s.Spec.TaskTemplate.WorkspaceRef != nil {
+			if s.Spec.TaskTemplate != nil && s.Spec.TaskTemplate.WorkspaceRef != nil {
 				source = s.Spec.TaskTemplate.WorkspaceRef.Name
 			} else {
 				source = "GitHub Pull Requests"
@@ -176,7 +176,7 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 	printField(w, "Name", ts.Name)
 	printField(w, "Namespace", ts.Namespace)
 	printField(w, "Phase", string(ts.Status.Phase))
-	if ts.Spec.TaskTemplate.WorkspaceRef != nil {
+	if ts.Spec.TaskTemplate != nil && ts.Spec.TaskTemplate.WorkspaceRef != nil {
 		printField(w, "Workspace", ts.Spec.TaskTemplate.WorkspaceRef.Name)
 	}
 	if ts.Spec.When.GitHubIssues != nil {
@@ -214,9 +214,17 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 		printField(w, "Source", "Cron")
 		printField(w, "Schedule", ts.Spec.When.Cron.Schedule)
 	}
-	printField(w, "Task Type", ts.Spec.TaskTemplate.Type)
-	if ts.Spec.TaskTemplate.Model != "" {
-		printField(w, "Model", ts.Spec.TaskTemplate.Model)
+	if ts.Spec.TaskTemplate != nil {
+		printField(w, "Task Type", ts.Spec.TaskTemplate.Type)
+		if ts.Spec.TaskTemplate.Model != "" {
+			printField(w, "Model", ts.Spec.TaskTemplate.Model)
+		}
+	} else if len(ts.Spec.TaskTemplates) > 0 {
+		stepNames := make([]string, len(ts.Spec.TaskTemplates))
+		for i, t := range ts.Spec.TaskTemplates {
+			stepNames[i] = t.Name
+		}
+		printField(w, "Pipeline Steps", fmt.Sprintf("%v", stepNames))
 	}
 	printField(w, "Poll Interval", ts.Spec.PollInterval)
 	if ts.Status.DeploymentName != "" {
