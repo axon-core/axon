@@ -1199,6 +1199,7 @@ spec:
                         Name is the step name within the pipeline, used for task name suffix
                         and as a reference target for other steps' dependsOn.
                       minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     podOverrides:
                       description: PodOverrides allows customizing the agent pod configuration
@@ -1496,6 +1497,7 @@ spec:
                   - name
                   - type
                   type: object
+                minItems: 1
                 type: array
               when:
                 description: When defines the conditions that trigger task spawning.

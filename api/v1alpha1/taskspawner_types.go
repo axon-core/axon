@@ -382,6 +382,7 @@ type NamedTaskTemplate struct {
 	// and as a reference target for other steps' dependsOn.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	Name string `json:"name"`
 
 	TaskTemplate `json:",inline"`
@@ -408,6 +409,7 @@ type TaskSpawnerSpec struct {
 	// with DependsOn references translated to fully-qualified task names.
 	// Exactly one of taskTemplate or taskTemplates must be set.
 	// +optional
+	// +kubebuilder:validation:MinItems=1
 	TaskTemplates []NamedTaskTemplate `json:"taskTemplates,omitempty"`
 
 	// PollInterval is how often to poll the source for new items (e.g., "5m"). Defaults to "5m".

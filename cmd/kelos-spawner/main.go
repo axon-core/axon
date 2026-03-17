@@ -270,12 +270,24 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 	}
 
 	var newItems []source.WorkItem
+	// In pipeline mode, track how many steps are missing per item for budget calculation.
+	missingStepsPerItem := make(map[string]int)
 	for _, item := range items {
 		if pipelineMode {
-			// In pipeline mode, check if the first step exists for this item
-			firstStepName := fmt.Sprintf("%s-%s-%s", ts.Name, item.ID, ts.Spec.TaskTemplates[0].Name)
-			if _, found := existingTaskMap[firstStepName]; !found {
+			// In pipeline mode, check if any step is missing for this item.
+			// This supports partial pipeline recovery: if the spawner crashed
+			// after creating some steps, the remaining steps are created on
+			// the next cycle.
+			missing := 0
+			for _, step := range ts.Spec.TaskTemplates {
+				taskName := fmt.Sprintf("%s-%s-%s", ts.Name, item.ID, step.Name)
+				if _, found := existingTaskMap[taskName]; !found {
+					missing++
+				}
+			}
+			if missing > 0 {
 				newItems = append(newItems, item)
+				missingStepsPerItem[item.ID] = missing
 			}
 			// TODO: retrigger support for pipelines can be added later
 		} else {
@@ -333,7 +345,7 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 				break
 			}
 
-			stepsToCreate := len(ts.Spec.TaskTemplates)
+			stepsToCreate := missingStepsPerItem[item.ID]
 
 			// Enforce max total tasks limit (counts individual tasks)
 			if maxTotalTasks > 0 && ts.Status.TotalTasksCreated+newTasksCreated+stepsToCreate > maxTotalTasks {

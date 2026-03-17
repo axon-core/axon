@@ -2563,17 +2563,27 @@ func TestRunCycleWithSource_TaskTemplates_PartialPipelineRecovery(t *testing.T) 
 		t.Fatalf("Listing tasks: %v", err)
 	}
 
-	// Item 42: plan exists, implement+open-pr should NOT be re-created since
-	// the first step already exists (item 42 is not "new").
+	// Item 42: plan exists, implement+open-pr should be created (partial recovery).
 	// Item 99: all 3 steps should be created (new item).
-	// Total: 1 (existing plan) + 3 (new item 99) = 4 tasks.
-	// Note: partial pipeline recovery for missing intermediate steps within
-	// an existing pipeline is handled on next cycles if the pipeline detection
-	// logic considers it new.
-	if len(taskList.Items) != 4 {
-		t.Errorf("Expected 4 tasks, got %d", len(taskList.Items))
-		for _, task := range taskList.Items {
-			t.Logf("  task: %s", task.Name)
+	// Total: 1 (existing plan) + 2 (recovered steps) + 3 (new item 99) = 6 tasks.
+	expected := map[string]bool{
+		"spawner-42-plan":      true,
+		"spawner-42-implement": true,
+		"spawner-42-open-pr":   true,
+		"spawner-99-plan":      true,
+		"spawner-99-implement": true,
+		"spawner-99-open-pr":   true,
+	}
+	if len(taskList.Items) != len(expected) {
+		t.Fatalf("Expected %d tasks, got %d", len(expected), len(taskList.Items))
+	}
+	for _, task := range taskList.Items {
+		if !expected[task.Name] {
+			t.Errorf("Unexpected task created: %s", task.Name)
 		}
+		delete(expected, task.Name)
+	}
+	for name := range expected {
+		t.Errorf("Expected task %q to be present", name)
 	}
 }
