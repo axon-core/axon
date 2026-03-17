@@ -35,7 +35,7 @@ kind: TaskSpawner
 metadata:
   name: kelos-workers
 spec:
-  when:
+  on:
     githubIssues:
       labels:
         - actor/kelos

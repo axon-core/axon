@@ -184,13 +184,14 @@ func collect(ctx context.Context, c client.Client, clientset kubernetes.Interfac
 	sourceTypes := make(map[string]struct{})
 	for _, s := range spawners.Items {
 		namespaces[s.Namespace] = struct{}{}
-		if s.Spec.When.GitHubIssues != nil {
+		on := s.Spec.EffectiveOn()
+		if on != nil && on.GitHubIssues != nil {
 			sourceTypes["github"] = struct{}{}
 		}
-		if s.Spec.When.Cron != nil {
+		if on != nil && on.Cron != nil {
 			sourceTypes["cron"] = struct{}{}
 		}
-		if s.Spec.When.Jira != nil {
+		if on != nil && on.Jira != nil {
 			sourceTypes["jira"] = struct{}{}
 		}
 	}

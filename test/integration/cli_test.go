@@ -285,6 +285,9 @@ var _ = Describe("CLI Delete All Commands", func() {
 						Namespace: ns.Name,
 					},
 					Spec: kelosv1alpha1.TaskSpawnerSpec{
+						When: &kelosv1alpha1.On{
+							Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+						},
 						TaskTemplate: kelosv1alpha1.TaskTemplate{
 							Type: "claude-code",
 							Credentials: kelosv1alpha1.Credentials{
@@ -375,6 +378,9 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -423,6 +429,9 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -471,6 +480,9 @@ var _ = Describe("CLI Delete TaskSpawner Command", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -539,6 +551,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -584,6 +599,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					Suspend: &suspend,
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
@@ -630,6 +648,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					Suspend: &suspend,
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
@@ -675,6 +696,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -713,6 +737,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{
@@ -766,6 +793,9 @@ var _ = Describe("CLI Suspend/Resume Commands", func() {
 					Namespace: ns.Name,
 				},
 				Spec: kelosv1alpha1.TaskSpawnerSpec{
+					When: &kelosv1alpha1.On{
+						Cron: &kelosv1alpha1.Cron{Schedule: "0 9 * * 1"},
+					},
 					TaskTemplate: kelosv1alpha1.TaskTemplate{
 						Type: "claude-code",
 						Credentials: kelosv1alpha1.Credentials{

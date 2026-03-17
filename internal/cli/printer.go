@@ -142,22 +142,23 @@ func printTaskSpawnerTable(w io.Writer, spawners []kelosv1alpha1.TaskSpawner, al
 	for _, s := range spawners {
 		age := duration.HumanDuration(time.Since(s.CreationTimestamp.Time))
 		source := ""
-		if s.Spec.When.GitHubIssues != nil {
+		on := s.Spec.EffectiveOn()
+		if on != nil && on.GitHubIssues != nil {
 			if s.Spec.TaskTemplate.WorkspaceRef != nil {
 				source = s.Spec.TaskTemplate.WorkspaceRef.Name
 			} else {
 				source = "GitHub Issues"
 			}
-		} else if s.Spec.When.GitHubPullRequests != nil {
+		} else if on != nil && on.GitHubPullRequests != nil {
 			if s.Spec.TaskTemplate.WorkspaceRef != nil {
 				source = s.Spec.TaskTemplate.WorkspaceRef.Name
 			} else {
 				source = "GitHub Pull Requests"
 			}
-		} else if s.Spec.When.Jira != nil {
-			source = s.Spec.When.Jira.Project
-		} else if s.Spec.When.Cron != nil {
-			source = "cron: " + s.Spec.When.Cron.Schedule
+		} else if on != nil && on.Jira != nil {
+			source = on.Jira.Project
+		} else if on != nil && on.Cron != nil {
+			source = "cron: " + on.Cron.Schedule
 		}
 		if allNamespaces {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
@@ -179,8 +180,9 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 	if ts.Spec.TaskTemplate.WorkspaceRef != nil {
 		printField(w, "Workspace", ts.Spec.TaskTemplate.WorkspaceRef.Name)
 	}
-	if ts.Spec.When.GitHubIssues != nil {
-		gh := ts.Spec.When.GitHubIssues
+	on := ts.Spec.EffectiveOn()
+	if on != nil && on.GitHubIssues != nil {
+		gh := on.GitHubIssues
 		printField(w, "Source", "GitHub Issues")
 		if len(gh.Types) > 0 {
 			printField(w, "Types", fmt.Sprintf("%v", gh.Types))
@@ -191,8 +193,8 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 		if len(gh.Labels) > 0 {
 			printField(w, "Labels", fmt.Sprintf("%v", gh.Labels))
 		}
-	} else if ts.Spec.When.GitHubPullRequests != nil {
-		gh := ts.Spec.When.GitHubPullRequests
+	} else if on != nil && on.GitHubPullRequests != nil {
+		gh := on.GitHubPullRequests
 		printField(w, "Source", "GitHub Pull Requests")
 		if gh.State != "" {
 			printField(w, "State", gh.State)
@@ -203,16 +205,16 @@ func printTaskSpawnerDetail(w io.Writer, ts *kelosv1alpha1.TaskSpawner) {
 		if gh.ReviewState != "" {
 			printField(w, "Review State", gh.ReviewState)
 		}
-	} else if ts.Spec.When.Jira != nil {
-		jira := ts.Spec.When.Jira
+	} else if on != nil && on.Jira != nil {
+		jira := on.Jira
 		printField(w, "Source", "Jira")
 		printField(w, "Project", jira.Project)
 		if jira.JQL != "" {
 			printField(w, "JQL", jira.JQL)
 		}
-	} else if ts.Spec.When.Cron != nil {
+	} else if on != nil && on.Cron != nil {
 		printField(w, "Source", "Cron")
-		printField(w, "Schedule", ts.Spec.When.Cron.Schedule)
+		printField(w, "Schedule", on.Cron.Schedule)
 	}
 	printField(w, "Task Type", ts.Spec.TaskTemplate.Type)
 	if ts.Spec.TaskTemplate.Model != "" {

@@ -4,7 +4,7 @@ kind: TaskSpawner
 metadata:
   name: fix-bugs
 spec:
-  when:
+  on:
     githubIssues:
       labels:
         - bug
@@ -36,7 +36,7 @@ kind: TaskSpawner
 metadata:
   name: daily-audit
 spec:
-  when:
+  on:
     cron:
       schedule: "0 9 * * 1-5"
   taskTemplate:
@@ -59,7 +59,7 @@ kind: TaskSpawner
 metadata:
   name: fork-worker
 spec:
-  when:
+  on:
     githubIssues:
       repo: https://github.com/upstream-org/upstream-repo.git
       labels:
@@ -90,7 +90,7 @@ kind: TaskSpawner
 metadata:
   name: comment-triggered
 spec:
-  when:
+  on:
     githubIssues:
       labels:
         - agent-ready
@@ -133,7 +133,7 @@ kind: TaskSpawner
 metadata:
   name: jira-worker
 spec:
-  when:
+  on:
     jira:
       baseUrl: https://mycompany.atlassian.net
       project: PROJ

@@ -24,7 +24,7 @@ kind: TaskSpawner
 metadata:
   name: kelos-image-update
 spec:
-  when:
+  on:
     cron:
       schedule: "0 3 * * *"
   maxConcurrency: 1

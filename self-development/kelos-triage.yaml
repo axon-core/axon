@@ -3,7 +3,7 @@ kind: TaskSpawner
 metadata:
   name: kelos-triage
 spec:
-  when:
+  on:
     githubIssues:
       types:
         - issues
