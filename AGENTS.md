@@ -7,6 +7,8 @@
 - **Better tests.** Always try to add or improve tests(including integration, e2e) when modifying code.
 - **Logging conventions.** Start log messages with capital letters and do not end with punctuation.
 - **Commit messages.** Do not include PR links in commit messages.
+- **Verify before pushing.** Always run `make verify` and `make test` locally before pushing code. Fix any failures before creating or updating a PR — do not rely solely on CI to catch issues.
+- **Search comprehensively.** When updating a value, reference, or convention, search the entire codebase (`grep -r`, etc.) for all locations that need the same update. Do not assume you found every occurrence after changing one file.
 
 ## Key Makefile Targets
 - `make verify` — run all verification checks (lint, fmt, vet, etc.).

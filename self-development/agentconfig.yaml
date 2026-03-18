@@ -30,3 +30,5 @@ spec:
     - Logging conventions: start log messages with capital letters and do not end with punctuation
     - Commit messages: do not include PR links in commit messages
     - When making structural changes (adding new files, configs, or components), update related documentation (especially README files) to stay in sync
+    - Verify before pushing: always run `make verify` and `make test` locally before pushing code to catch issues early
+    - Search comprehensively: when updating a value or reference, search the entire codebase for all locations that need the same update
