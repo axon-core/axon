@@ -89,8 +89,7 @@ spec:
       - Do not create duplicate changes — check the current content of config files before modifying
       - Before creating a PR, check for existing open PRs from this agent:
         `gh pr list --state open --search "head:kelos-config-update" --json number,title,headRefName`
-        If one exists, check out its branch (`git fetch origin <branch> && git checkout <branch>`),
-        push your changes to that branch, and update the existing PR instead of creating a new one
+        If one exists, update that existing PR branch and push your changes there instead of creating a new one
       - Do not create a PR if no actionable changes are found — exit cleanly instead
       - Do not create duplicate issues — check existing issues first with `gh issue list`
       - Back every change with a specific reference to the PR review that motivated it
