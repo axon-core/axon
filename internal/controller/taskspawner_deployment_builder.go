@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kelosv1alpha1 "github.com/kelos-dev/kelos/api/v1alpha1"
@@ -32,6 +33,7 @@ const (
 type DeploymentBuilder struct {
 	SpawnerImage                  string
 	SpawnerImagePullPolicy        corev1.PullPolicy
+	SpawnerResources              *corev1.ResourceRequirements
 	TokenRefresherImage           string
 	TokenRefresherImagePullPolicy corev1.PullPolicy
 }
@@ -261,6 +263,9 @@ func (b *DeploymentBuilder) Build(ts *kelosv1alpha1.TaskSpawner, workspace *kelo
 		Env:             p.envVars,
 		VolumeMounts:    p.volumeMounts,
 	}
+	if b.SpawnerResources != nil {
+		spawnerContainer.Resources = *b.SpawnerResources
+	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -310,6 +315,9 @@ func (b *DeploymentBuilder) BuildCronJob(ts *kelosv1alpha1.TaskSpawner, workspac
 		Args:            args,
 		Env:             p.envVars,
 		VolumeMounts:    p.volumeMounts,
+	}
+	if b.SpawnerResources != nil {
+		spawnerContainer.Resources = *b.SpawnerResources
 	}
 
 	backoffLimit := int32(0)
@@ -395,6 +403,38 @@ func githubSourceRepoOverride(ts *kelosv1alpha1.TaskSpawner) string {
 		return ts.Spec.When.GitHubPullRequests.Repo
 	}
 	return ""
+}
+
+// ParseResourceList parses a comma-separated "name=value" string into a
+// corev1.ResourceList. An empty string returns nil. Each value must pass
+// Kubernetes quantity parsing.
+func ParseResourceList(s string) (corev1.ResourceList, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	rl := corev1.ResourceList{}
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid resource entry %q: expected name=value", entry)
+		}
+		name := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if name == "" || value == "" {
+			return nil, fmt.Errorf("invalid resource entry %q: expected name=value", entry)
+		}
+		qty, err := resource.ParseQuantity(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid quantity for %q: %w", name, err)
+		}
+		rl[corev1.ResourceName(name)] = qty
+	}
+	return rl, nil
 }
 
 // gitHubAPIBaseURL returns the GitHub API base URL for the given host.

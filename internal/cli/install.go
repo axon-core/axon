@@ -35,6 +35,8 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	var flagVersion string
 	var imagePullPolicy string
 	var disableHeartbeat bool
+	var spawnerResourceRequests string
+	var spawnerResourceLimits string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -45,7 +47,7 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 				version.Version = flagVersion
 			}
 
-			vals := buildHelmValues(version.Version, imagePullPolicy, disableHeartbeat)
+			vals := buildHelmValues(version.Version, imagePullPolicy, disableHeartbeat, spawnerResourceRequests, spawnerResourceLimits)
 			controllerManifest, err := helmchart.Render(manifests.ChartFS, vals)
 			if err != nil {
 				return fmt.Errorf("rendering chart: %w", err)
@@ -95,12 +97,14 @@ func newInstallCommand(cfg *ClientConfig) *cobra.Command {
 	cmd.Flags().StringVar(&flagVersion, "version", "", "override the version used for image tags (defaults to the binary version)")
 	cmd.Flags().StringVar(&imagePullPolicy, "image-pull-policy", "", "set imagePullPolicy on controller containers (e.g. Always, IfNotPresent, Never)")
 	cmd.Flags().BoolVar(&disableHeartbeat, "disable-heartbeat", false, "do not install the telemetry heartbeat CronJob")
+	cmd.Flags().StringVar(&spawnerResourceRequests, "spawner-resource-requests", "", "resource requests for spawner containers (e.g., cpu=250m,memory=512Mi)")
+	cmd.Flags().StringVar(&spawnerResourceLimits, "spawner-resource-limits", "", "resource limits for spawner containers (e.g., cpu=1,memory=1Gi)")
 
 	return cmd
 }
 
 // buildHelmValues constructs the values map for Helm chart rendering from CLI flags.
-func buildHelmValues(ver string, pullPolicy string, disableHeartbeat bool) map[string]interface{} {
+func buildHelmValues(ver string, pullPolicy string, disableHeartbeat bool, spawnerResourceRequests string, spawnerResourceLimits string) map[string]interface{} {
 	imageVals := map[string]interface{}{
 		"tag": ver,
 	}
@@ -114,6 +118,12 @@ func buildHelmValues(ver string, pullPolicy string, disableHeartbeat bool) map[s
 		vals["telemetry"] = map[string]interface{}{
 			"enabled": false,
 		}
+	}
+	if spawnerResourceRequests != "" {
+		vals["spawnerResourceRequests"] = spawnerResourceRequests
+	}
+	if spawnerResourceLimits != "" {
+		vals["spawnerResourceLimits"] = spawnerResourceLimits
 	}
 	return vals
 }

@@ -395,11 +395,13 @@ func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *kelosv
 		if current.Image != target.Image ||
 			!equalStringSlices(current.Args, target.Args) ||
 			!equalEnvVars(current.Env, target.Env) ||
-			!reflect.DeepEqual(current.VolumeMounts, target.VolumeMounts) {
+			!reflect.DeepEqual(current.VolumeMounts, target.VolumeMounts) ||
+			!resourceRequirementsEqual(current.Resources, target.Resources) {
 			deploy.Spec.Template.Spec.Containers[0].Image = target.Image
 			deploy.Spec.Template.Spec.Containers[0].Args = target.Args
 			deploy.Spec.Template.Spec.Containers[0].Env = target.Env
 			deploy.Spec.Template.Spec.Containers[0].VolumeMounts = target.VolumeMounts
+			deploy.Spec.Template.Spec.Containers[0].Resources = target.Resources
 			needsUpdate = true
 		}
 	}
@@ -509,11 +511,13 @@ func (r *TaskSpawnerReconciler) updateCronJob(ctx context.Context, ts *kelosv1al
 		if current.Image != target.Image ||
 			!equalStringSlices(current.Args, target.Args) ||
 			!equalEnvVars(current.Env, target.Env) ||
-			!reflect.DeepEqual(current.VolumeMounts, target.VolumeMounts) {
+			!reflect.DeepEqual(current.VolumeMounts, target.VolumeMounts) ||
+			!resourceRequirementsEqual(current.Resources, target.Resources) {
 			currentPodSpec.Containers[0].Image = target.Image
 			currentPodSpec.Containers[0].Args = target.Args
 			currentPodSpec.Containers[0].Env = target.Env
 			currentPodSpec.Containers[0].VolumeMounts = target.VolumeMounts
+			currentPodSpec.Containers[0].Resources = target.Resources
 			needsUpdate = true
 		}
 	}
@@ -763,4 +767,26 @@ func (r *TaskSpawnerReconciler) findTaskSpawnersForWorkspace(ctx context.Context
 		}
 	}
 	return requests
+}
+
+// resourceRequirementsEqual compares two ResourceRequirements using semantic
+// equality for quantities instead of reflect.DeepEqual, which can report false
+// negatives when the internal representation of equal quantities differs.
+func resourceRequirementsEqual(a, b corev1.ResourceRequirements) bool {
+	return reflect.DeepEqual(a.Claims, b.Claims) &&
+		resourceListEqual(a.Requests, b.Requests) &&
+		resourceListEqual(a.Limits, b.Limits)
+}
+
+func resourceListEqual(a, b corev1.ResourceList) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, aQty := range a {
+		bQty, ok := b[name]
+		if !ok || !aQty.Equal(bQty) {
+			return false
+		}
+	}
+	return true
 }
