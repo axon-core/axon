@@ -4,7 +4,7 @@ metadata:
   name: kelos-skill-agent
 spec:
   # The kelos skill teaches agents how to author and debug Kelos resources.
-  # Point the skill content at the in-repo skill/SKILL.md file or inline it.
+  # Point the skill content at the in-repo skills/kelos/SKILL.md file or inline it.
   plugins:
     - name: kelos
       skills:

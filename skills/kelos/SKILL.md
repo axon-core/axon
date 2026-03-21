@@ -1,3 +1,9 @@
+---
+name: kelos
+description: Author, debug, and operate Kelos resources (Task, Workspace, AgentConfig, TaskSpawner) on Kubernetes. Use when working with Kelos CRDs or the kelos CLI.
+compatibility: Requires kubectl and access to a Kubernetes cluster
+---
+
 # Kelos Skill
 
 Use this skill when you need to author, debug, or operate Kelos resources

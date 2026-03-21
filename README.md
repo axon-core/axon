@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#kelos-skill">Kelos Skill</a> &middot;
   <a href="#kelos-developing-kelos">Kelos Developing Kelos</a> &middot;
   <a href="#examples">Examples</a> &middot;
   <a href="docs/reference.md">Reference</a> &middot;
@@ -291,14 +292,22 @@ Or pass `--secret` to `kelos run` with a pre-created secret (api-key is the defa
 
 </details>
 
-> **Kelos Skill** — Not sure where to start? Kelos ships with a [skill](skill/) that teaches AI coding agents how to author and operate Kelos resources. Copy `skill/` into your project and ask your agent:
->
-> ```
-> Using the /kelos skill, set up a TaskSpawner that watches GitHub issues
-> labeled "bug" and auto-creates Tasks to fix them.
-> ```
->
-> The agent will generate the correct manifests, apply them, and troubleshoot any issues on your behalf.
+## Kelos Skill
+
+The [Kelos skill](skills/kelos/) teaches AI coding agents how to author and operate Kelos resources. Install it via [skills.sh](https://skills.sh):
+
+```bash
+npx skills add kelos-dev/kelos
+```
+
+Then ask your agent:
+
+```
+Using the /kelos skill, set up a TaskSpawner that watches GitHub issues
+labeled "bug" and auto-creates Tasks to fix them.
+```
+
+The agent will generate the correct manifests, apply them, and troubleshoot any issues on your behalf.
 
 ## Examples
 
