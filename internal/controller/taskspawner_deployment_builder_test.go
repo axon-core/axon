@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -2179,5 +2180,361 @@ func TestReconcileDeployment_ClearsStaleCronJobName(t *testing.T) {
 	}
 	if updated.Status.CronJobName != "" {
 		t.Errorf("expected CronJobName to be cleared, got %q", updated.Status.CronJobName)
+	}
+}
+
+func TestParseResourceList(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantNil bool
+		wantErr bool
+		check   func(t *testing.T, rl corev1.ResourceList)
+	}{
+		{
+			name:    "empty string returns nil",
+			input:   "",
+			wantNil: true,
+		},
+		{
+			name:    "whitespace-only returns nil",
+			input:   "  ",
+			wantNil: true,
+		},
+		{
+			name:  "valid cpu and memory",
+			input: "cpu=250m,memory=512Mi",
+			check: func(t *testing.T, rl corev1.ResourceList) {
+				if cpu, ok := rl[corev1.ResourceCPU]; !ok || cpu.String() != "250m" {
+					t.Errorf("expected cpu=250m, got %v", cpu)
+				}
+				if mem, ok := rl[corev1.ResourceMemory]; !ok || mem.String() != "512Mi" {
+					t.Errorf("expected memory=512Mi, got %v", mem)
+				}
+			},
+		},
+		{
+			name:  "single resource",
+			input: "cpu=1",
+			check: func(t *testing.T, rl corev1.ResourceList) {
+				if len(rl) != 1 {
+					t.Errorf("expected 1 resource, got %d", len(rl))
+				}
+			},
+		},
+		{
+			name:  "ephemeral storage",
+			input: "ephemeral-storage=2Gi",
+			check: func(t *testing.T, rl corev1.ResourceList) {
+				if _, ok := rl[corev1.ResourceEphemeralStorage]; !ok {
+					t.Error("expected ephemeral-storage to be present")
+				}
+			},
+		},
+		{
+			name:    "missing value",
+			input:   "cpu=",
+			wantErr: true,
+		},
+		{
+			name:    "missing name",
+			input:   "=250m",
+			wantErr: true,
+		},
+		{
+			name:    "no equals sign",
+			input:   "cpu",
+			wantErr: true,
+		},
+		{
+			name:    "invalid quantity",
+			input:   "cpu=notaquantity",
+			wantErr: true,
+		},
+		{
+			name:  "multiple resources with spaces",
+			input: " cpu=100m , memory=256Mi ",
+			check: func(t *testing.T, rl corev1.ResourceList) {
+				if len(rl) != 2 {
+					t.Errorf("expected 2 resources, got %d", len(rl))
+				}
+			},
+		},
+		{
+			name:  "spaces around equals sign are trimmed",
+			input: "cpu = 250m , memory = 512Mi",
+			check: func(t *testing.T, rl corev1.ResourceList) {
+				if cpu, ok := rl[corev1.ResourceCPU]; !ok || cpu.String() != "250m" {
+					t.Errorf("expected cpu=250m, got %v", cpu)
+				}
+				if mem, ok := rl[corev1.ResourceMemory]; !ok || mem.String() != "512Mi" {
+					t.Errorf("expected memory=512Mi, got %v", mem)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rl, err := ParseResourceList(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if rl != nil {
+					t.Errorf("expected nil, got %v", rl)
+				}
+				return
+			}
+			if tt.check != nil {
+				tt.check(t, rl)
+			}
+		})
+	}
+}
+
+func TestDeploymentBuilder_SpawnerResources(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	builder.SpawnerResources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+
+	deploy := builder.Build(ts, nil, false)
+	spawner := deploy.Spec.Template.Spec.Containers[0]
+	if spawner.Resources.Requests.Cpu().String() != "250m" {
+		t.Errorf("expected cpu request 250m, got %s", spawner.Resources.Requests.Cpu().String())
+	}
+	if spawner.Resources.Limits.Memory().String() != "1Gi" {
+		t.Errorf("expected memory limit 1Gi, got %s", spawner.Resources.Limits.Memory().String())
+	}
+}
+
+func TestDeploymentBuilder_SpawnerResources_NilPreservesDefault(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	// SpawnerResources is nil by default
+
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+
+	deploy := builder.Build(ts, nil, false)
+	spawner := deploy.Spec.Template.Spec.Containers[0]
+	if len(spawner.Resources.Requests) != 0 || len(spawner.Resources.Limits) != 0 {
+		t.Errorf("expected empty resources when SpawnerResources is nil, got requests=%v limits=%v", spawner.Resources.Requests, spawner.Resources.Limits)
+	}
+}
+
+func TestDeploymentBuilder_CronJob_SpawnerResources(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	builder.SpawnerResources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU: resource.MustParse("100m"),
+		},
+	}
+
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				Cron: &kelosv1alpha1.Cron{
+					Schedule: "*/5 * * * *",
+				},
+			},
+		},
+	}
+
+	cronJob := builder.BuildCronJob(ts, nil, false)
+	spawner := cronJob.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	if spawner.Resources.Requests.Cpu().String() != "100m" {
+		t.Errorf("expected cpu request 100m on CronJob, got %s", spawner.Resources.Requests.Cpu().String())
+	}
+}
+
+func TestDeploymentBuilder_SpawnerResources_TokenRefresherUnaffected(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	builder.SpawnerResources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU: resource.MustParse("250m"),
+		},
+	}
+
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+	workspace := &kelosv1alpha1.WorkspaceSpec{
+		Repo: "https://github.com/kelos-dev/kelos.git",
+		SecretRef: &kelosv1alpha1.SecretReference{
+			Name: "github-app-creds",
+		},
+	}
+
+	deploy := builder.Build(ts, workspace, true)
+	if len(deploy.Spec.Template.Spec.InitContainers) != 1 {
+		t.Fatalf("expected 1 init container, got %d", len(deploy.Spec.Template.Spec.InitContainers))
+	}
+	refresher := deploy.Spec.Template.Spec.InitContainers[0]
+	if len(refresher.Resources.Requests) != 0 || len(refresher.Resources.Limits) != 0 {
+		t.Errorf("expected token-refresher to have no resources, got requests=%v limits=%v", refresher.Resources.Requests, refresher.Resources.Limits)
+	}
+}
+
+func TestUpdateDeployment_ResourcesDrift(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+
+	// Build a deployment with no resources
+	deploy := builder.Build(ts, nil, false)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(kelosv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, deploy).
+		WithStatusSubresource(ts).
+		Build()
+
+	// Now update the builder to have resources
+	builder.SpawnerResources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+	}
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	ctx := context.Background()
+	if err := r.updateDeployment(ctx, ts, deploy, nil, false, 1); err != nil {
+		t.Fatalf("updateDeployment error: %v", err)
+	}
+
+	var updated appsv1.Deployment
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(deploy), &updated); err != nil {
+		t.Fatalf("getting deployment: %v", err)
+	}
+
+	spawner := updated.Spec.Template.Spec.Containers[0]
+	if spawner.Resources.Requests.Cpu().String() != "250m" {
+		t.Errorf("expected cpu request 250m after drift update, got %s", spawner.Resources.Requests.Cpu().String())
+	}
+}
+
+func TestUpdateCronJob_ResourcesDrift(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				Cron: &kelosv1alpha1.Cron{
+					Schedule: "*/5 * * * *",
+				},
+			},
+		},
+	}
+
+	// Build a CronJob with no resources
+	cronJob := builder.BuildCronJob(ts, nil, false)
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(batchv1.AddToScheme(scheme))
+	utilruntime.Must(kelosv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, cronJob).
+		WithStatusSubresource(ts).
+		Build()
+
+	// Now update the builder to have resources
+	builder.SpawnerResources = &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU: resource.MustParse("100m"),
+		},
+	}
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	ctx := context.Background()
+	if err := r.updateCronJob(ctx, ts, cronJob, nil, false, false); err != nil {
+		t.Fatalf("updateCronJob error: %v", err)
+	}
+
+	var updated batchv1.CronJob
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(cronJob), &updated); err != nil {
+		t.Fatalf("getting CronJob: %v", err)
+	}
+
+	spawner := updated.Spec.JobTemplate.Spec.Template.Spec.Containers[0]
+	if spawner.Resources.Requests.Cpu().String() != "100m" {
+		t.Errorf("expected cpu request 100m after drift update, got %s", spawner.Resources.Requests.Cpu().String())
 	}
 }

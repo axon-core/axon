@@ -149,7 +149,7 @@ func TestParseManifests_EmbeddedCRDs(t *testing.T) {
 
 func renderDefaultChart(t *testing.T) []byte {
 	t.Helper()
-	vals := buildHelmValues("v0.0.0-test", "", false)
+	vals := buildHelmValues("v0.0.0-test", "", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -178,7 +178,7 @@ func TestRenderChart_DefaultValues(t *testing.T) {
 }
 
 func TestRenderChart_VersionSubstitution(t *testing.T) {
-	vals := buildHelmValues("v0.5.0", "", false)
+	vals := buildHelmValues("v0.5.0", "", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -192,7 +192,7 @@ func TestRenderChart_VersionSubstitution(t *testing.T) {
 }
 
 func TestRenderChart_ImageArgs(t *testing.T) {
-	vals := buildHelmValues("v0.3.0", "", false)
+	vals := buildHelmValues("v0.3.0", "", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -213,7 +213,7 @@ func TestRenderChart_ImageArgs(t *testing.T) {
 }
 
 func TestRenderChart_ImagePullPolicy(t *testing.T) {
-	vals := buildHelmValues("v0.1.0", "Always", false)
+	vals := buildHelmValues("v0.1.0", "Always", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -236,7 +236,7 @@ func TestRenderChart_ImagePullPolicy(t *testing.T) {
 }
 
 func TestRenderChart_NoPullPolicyByDefault(t *testing.T) {
-	vals := buildHelmValues("latest", "", false)
+	vals := buildHelmValues("latest", "", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -250,7 +250,7 @@ func TestRenderChart_NoPullPolicyByDefault(t *testing.T) {
 }
 
 func TestRenderChart_DisableHeartbeat(t *testing.T) {
-	vals := buildHelmValues("latest", "", true)
+	vals := buildHelmValues("latest", "", true, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -277,7 +277,7 @@ func TestRenderChart_DisableHeartbeat(t *testing.T) {
 }
 
 func TestRenderChart_EnableHeartbeat(t *testing.T) {
-	vals := buildHelmValues("latest", "", false)
+	vals := buildHelmValues("latest", "", false, "", "")
 	data, err := helmchart.Render(manifests.ChartFS, vals)
 	if err != nil {
 		t.Fatalf("rendering chart: %v", err)
@@ -441,6 +441,82 @@ func TestInstallCommand_DisableHeartbeatFlag(t *testing.T) {
 	}
 }
 
+func TestInstallCommand_SpawnerResourceRequestsFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--spawner-resource-requests", "cpu=250m,memory=512Mi"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "--spawner-resource-requests=cpu=250m,memory=512Mi") {
+		t.Errorf("expected --spawner-resource-requests arg in output")
+	}
+}
+
+func TestInstallCommand_SpawnerResourceLimitsFlag(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run", "--spawner-resource-limits", "cpu=1,memory=1Gi"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if !strings.Contains(output, "--spawner-resource-limits=cpu=1,memory=1Gi") {
+		t.Errorf("expected --spawner-resource-limits arg in output")
+	}
+}
+
+func TestInstallCommand_NoSpawnerResourcesByDefault(t *testing.T) {
+	cmd := NewRootCommand()
+	cmd.SetArgs([]string{"install", "--dry-run"})
+
+	output := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	if strings.Contains(output, "--spawner-resource-requests") {
+		t.Error("expected no --spawner-resource-requests when not set")
+	}
+	if strings.Contains(output, "--spawner-resource-limits") {
+		t.Error("expected no --spawner-resource-limits when not set")
+	}
+}
+
+func TestRenderChart_SpawnerResources(t *testing.T) {
+	vals := buildHelmValues("latest", "", false, "cpu=250m,memory=512Mi", "cpu=1,memory=1Gi")
+	data, err := helmchart.Render(manifests.ChartFS, vals)
+	if err != nil {
+		t.Fatalf("rendering chart: %v", err)
+	}
+	if !bytes.Contains(data, []byte("--spawner-resource-requests=cpu=250m,memory=512Mi")) {
+		t.Error("expected --spawner-resource-requests in rendered output")
+	}
+	if !bytes.Contains(data, []byte("--spawner-resource-limits=cpu=1,memory=1Gi")) {
+		t.Error("expected --spawner-resource-limits in rendered output")
+	}
+}
+
+func TestRenderChart_NoSpawnerResourcesByDefault(t *testing.T) {
+	vals := buildHelmValues("latest", "", false, "", "")
+	data, err := helmchart.Render(manifests.ChartFS, vals)
+	if err != nil {
+		t.Fatalf("rendering chart: %v", err)
+	}
+	if bytes.Contains(data, []byte("spawner-resource-requests")) {
+		t.Error("expected no spawner-resource-requests when not set")
+	}
+	if bytes.Contains(data, []byte("spawner-resource-limits")) {
+		t.Error("expected no spawner-resource-limits when not set")
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	cmd := NewRootCommand()
 	cmd.SetArgs([]string{"version"})
@@ -570,11 +646,13 @@ func TestWaitForCustomResourceDeletion_RespectsContextCancellation(t *testing.T)
 
 func TestBuildHelmValues(t *testing.T) {
 	tests := []struct {
-		name             string
-		version          string
-		pullPolicy       string
-		disableHeartbeat bool
-		checkFn          func(t *testing.T, vals map[string]interface{})
+		name                    string
+		version                 string
+		pullPolicy              string
+		disableHeartbeat        bool
+		spawnerResourceRequests string
+		spawnerResourceLimits   string
+		checkFn                 func(t *testing.T, vals map[string]interface{})
 	}{
 		{
 			name:    "default values",
@@ -589,6 +667,12 @@ func TestBuildHelmValues(t *testing.T) {
 				}
 				if _, ok := vals["telemetry"]; ok {
 					t.Error("expected no telemetry key when not disabled")
+				}
+				if _, ok := vals["spawnerResourceRequests"]; ok {
+					t.Error("expected no spawnerResourceRequests when empty")
+				}
+				if _, ok := vals["spawnerResourceLimits"]; ok {
+					t.Error("expected no spawnerResourceLimits when empty")
 				}
 			},
 		},
@@ -614,10 +698,30 @@ func TestBuildHelmValues(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:                    "with spawner resource requests",
+			version:                 "latest",
+			spawnerResourceRequests: "cpu=250m,memory=512Mi",
+			checkFn: func(t *testing.T, vals map[string]interface{}) {
+				if vals["spawnerResourceRequests"] != "cpu=250m,memory=512Mi" {
+					t.Errorf("expected spawnerResourceRequests=cpu=250m,memory=512Mi, got %v", vals["spawnerResourceRequests"])
+				}
+			},
+		},
+		{
+			name:                  "with spawner resource limits",
+			version:               "latest",
+			spawnerResourceLimits: "cpu=1,memory=1Gi",
+			checkFn: func(t *testing.T, vals map[string]interface{}) {
+				if vals["spawnerResourceLimits"] != "cpu=1,memory=1Gi" {
+					t.Errorf("expected spawnerResourceLimits=cpu=1,memory=1Gi, got %v", vals["spawnerResourceLimits"])
+				}
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			vals := buildHelmValues(tt.version, tt.pullPolicy, tt.disableHeartbeat)
+			vals := buildHelmValues(tt.version, tt.pullPolicy, tt.disableHeartbeat, tt.spawnerResourceRequests, tt.spawnerResourceLimits)
 			tt.checkFn(t, vals)
 		})
 	}

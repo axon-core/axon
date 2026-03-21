@@ -54,6 +54,12 @@ spec:
             {{- if .Values.image.pullPolicy }}
             - --spawner-image-pull-policy={{ .Values.image.pullPolicy }}
             {{- end }}
+            {{- if .Values.spawnerResourceRequests }}
+            - --spawner-resource-requests={{ .Values.spawnerResourceRequests }}
+            {{- end }}
+            {{- if .Values.spawnerResourceLimits }}
+            - --spawner-resource-limits={{ .Values.spawnerResourceLimits }}
+            {{- end }}
             - --token-refresher-image={{ .Values.tokenRefresherImage }}{{- if .Values.image.tag }}:{{ .Values.image.tag }}{{- end }}
             {{- if .Values.image.pullPolicy }}
             - --token-refresher-image-pull-policy={{ .Values.image.pullPolicy }}

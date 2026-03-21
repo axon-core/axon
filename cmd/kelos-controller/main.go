@@ -50,6 +50,8 @@ func main() {
 	var cursorImagePullPolicy string
 	var spawnerImage string
 	var spawnerImagePullPolicy string
+	var spawnerResourceRequests string
+	var spawnerResourceLimits string
 	var tokenRefresherImage string
 	var tokenRefresherImagePullPolicy string
 	var telemetryReport bool
@@ -73,6 +75,8 @@ func main() {
 	flag.StringVar(&cursorImagePullPolicy, "cursor-image-pull-policy", "", "The image pull policy for Cursor CLI agent containers (e.g., Always, Never, IfNotPresent).")
 	flag.StringVar(&spawnerImage, "spawner-image", controller.DefaultSpawnerImage, "The image to use for spawner Deployments.")
 	flag.StringVar(&spawnerImagePullPolicy, "spawner-image-pull-policy", "", "The image pull policy for spawner Deployments (e.g., Always, Never, IfNotPresent).")
+	flag.StringVar(&spawnerResourceRequests, "spawner-resource-requests", "", "Resource requests for spawner containers as comma-separated name=value pairs (e.g., cpu=250m,memory=512Mi).")
+	flag.StringVar(&spawnerResourceLimits, "spawner-resource-limits", "", "Resource limits for spawner containers as comma-separated name=value pairs (e.g., cpu=1,memory=1Gi).")
 	flag.StringVar(&tokenRefresherImage, "token-refresher-image", controller.DefaultTokenRefresherImage, "The image to use for the token refresher sidecar.")
 	flag.StringVar(&tokenRefresherImagePullPolicy, "token-refresher-image-pull-policy", "", "The image pull policy for the token refresher sidecar (e.g., Always, Never, IfNotPresent).")
 	flag.BoolVar(&telemetryReport, "telemetry-report", false, "Run a one-shot telemetry report and exit.")
@@ -88,6 +92,25 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(opts)))
+
+	// Parse spawner resource flags
+	var spawnerResources *corev1.ResourceRequirements
+	requests, err := controller.ParseResourceList(spawnerResourceRequests)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing --spawner-resource-requests: %v\n", err)
+		os.Exit(1)
+	}
+	limits, err := controller.ParseResourceList(spawnerResourceLimits)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing --spawner-resource-limits: %v\n", err)
+		os.Exit(1)
+	}
+	if requests != nil || limits != nil {
+		spawnerResources = &corev1.ResourceRequirements{
+			Requests: requests,
+			Limits:   limits,
+		}
+	}
 
 	if telemetryReport {
 		log := ctrl.Log.WithName("telemetry")
@@ -164,6 +187,7 @@ func main() {
 	deploymentBuilder := controller.NewDeploymentBuilder()
 	deploymentBuilder.SpawnerImage = spawnerImage
 	deploymentBuilder.SpawnerImagePullPolicy = corev1.PullPolicy(spawnerImagePullPolicy)
+	deploymentBuilder.SpawnerResources = spawnerResources
 	deploymentBuilder.TokenRefresherImage = tokenRefresherImage
 	deploymentBuilder.TokenRefresherImagePullPolicy = corev1.PullPolicy(tokenRefresherImagePullPolicy)
 	if err = (&controller.TaskSpawnerReconciler{
