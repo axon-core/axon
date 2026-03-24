@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main,prod]
+    branches: [main, prod]
     tags: ["v*"]
 
 concurrency:
