@@ -30,4 +30,5 @@ spec:
     - Logging conventions: start log messages with capital letters and do not end with punctuation
     - Commit messages: do not include PR links in commit messages
     - When making structural changes (adding new files, configs, or components), update related documentation (especially README files) to stay in sync
+    - When changing user-facing guidance or instructions, search for all surfaces that reference the same topic (docs, CLI output, templates, code comments) and update them together
     - Kubernetes resource comparison: use semantic `.Equal()` or `.Cmp()` methods for `resource.Quantity` comparisons, not `reflect.DeepEqual`

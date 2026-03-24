@@ -8,6 +8,7 @@
 - **Logging conventions.** Start log messages with capital letters and do not end with punctuation.
 - **Commit messages.** Do not include PR links in commit messages.
 - **Kubernetes resource comparison.** Use semantic `.Equal()` or `.Cmp()` methods for `resource.Quantity` comparisons, not `reflect.DeepEqual` — structurally different Quantity values can be semantically identical (e.g., `1000m` vs `1` CPU).
+- **Consistent guidance across surfaces.** When changing user-facing guidance or instructions, search for all surfaces that reference the same topic (docs, CLI output, templates, code comments) and update them together.
 
 ## Key Makefile Targets
 - `make verify` — run all verification checks (lint, fmt, vet, etc.).
