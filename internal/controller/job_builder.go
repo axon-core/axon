@@ -168,6 +168,53 @@ func oauthEnvVar(agentType string) string {
 	}
 }
 
+// credentialEnvVars returns the environment variables to inject for the given
+// credentials and agent type. This centralises all credential-type-specific
+// logic so that new providers (e.g. Vertex) only need to add a case here.
+func credentialEnvVars(creds kelosv1alpha1.Credentials, agentType string) []corev1.EnvVar {
+	secretName := ""
+	if creds.SecretRef != nil {
+		secretName = creds.SecretRef.Name
+	}
+
+	secretEnvRef := func(key string, optional bool) corev1.EnvVar {
+		sel := &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
+			Key:                  key,
+		}
+		if optional {
+			sel.Optional = ptr(true)
+		}
+		return corev1.EnvVar{
+			Name:      key,
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: sel},
+		}
+	}
+
+	switch creds.Type {
+	case kelosv1alpha1.CredentialTypeAPIKey:
+		keyName := apiKeyEnvVar(agentType)
+		return []corev1.EnvVar{secretEnvRef(keyName, false)}
+
+	case kelosv1alpha1.CredentialTypeOAuth:
+		tokenName := oauthEnvVar(agentType)
+		return []corev1.EnvVar{secretEnvRef(tokenName, false)}
+
+	case kelosv1alpha1.CredentialTypeNone:
+		// No built-in credential injection; users supply their own
+		// credentials via PodOverrides.Env.
+		return nil
+
+	default:
+		return nil
+	}
+}
+
+// ptr returns a pointer to the given value.
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func effectiveWorkspaceRemotes(workspace *kelosv1alpha1.WorkspaceSpec) []kelosv1alpha1.GitRemote {
 	if workspace == nil {
 		return nil
@@ -224,34 +271,8 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 		})
 	}
 
-	switch task.Spec.Credentials.Type {
-	case kelosv1alpha1.CredentialTypeAPIKey:
-		keyName := apiKeyEnvVar(task.Spec.Type)
-		envVars = append(envVars, corev1.EnvVar{
-			Name: keyName,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: task.Spec.Credentials.SecretRef.Name,
-					},
-					Key: keyName,
-				},
-			},
-		})
-	case kelosv1alpha1.CredentialTypeOAuth:
-		tokenName := oauthEnvVar(task.Spec.Type)
-		envVars = append(envVars, corev1.EnvVar{
-			Name: tokenName,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: task.Spec.Credentials.SecretRef.Name,
-					},
-					Key: tokenName,
-				},
-			},
-		})
-	}
+	credEnvVars := credentialEnvVars(task.Spec.Credentials, task.Spec.Type)
+	envVars = append(envVars, credEnvVars...)
 
 	var workspaceEnvVars []corev1.EnvVar
 	var isEnterprise bool
@@ -546,6 +567,7 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 
 	// Apply PodOverrides before constructing the Job so all overrides
 	// are reflected in the final spec.
+	var serviceAccountName string
 	var activeDeadlineSeconds *int64
 	var nodeSelector map[string]string
 
@@ -574,6 +596,10 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 
 		if po.NodeSelector != nil {
 			nodeSelector = po.NodeSelector
+		}
+
+		if po.ServiceAccountName != "" {
+			serviceAccountName = po.ServiceAccountName
 		}
 	}
 
@@ -626,12 +652,13 @@ func (b *JobBuilder) buildAgentJob(task *kelosv1alpha1.Task, workspace *kelosv1a
 					},
 				},
 				Spec: corev1.PodSpec{
-					RestartPolicy:   corev1.RestartPolicyNever,
-					SecurityContext: podSecurityContext,
-					InitContainers:  initContainers,
-					Volumes:         volumes,
-					Containers:      []corev1.Container{mainContainer},
-					NodeSelector:    nodeSelector,
+					RestartPolicy:      corev1.RestartPolicyNever,
+					SecurityContext:    podSecurityContext,
+					ServiceAccountName: serviceAccountName,
+					InitContainers:     initContainers,
+					Volumes:            volumes,
+					Containers:         []corev1.Container{mainContainer},
+					NodeSelector:       nodeSelector,
 				},
 			},
 		},
