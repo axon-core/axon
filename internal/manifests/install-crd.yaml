@@ -304,7 +304,9 @@ spec:
                 description: Credentials specifies how to authenticate with the agent.
                 properties:
                   secretRef:
-                    description: SecretRef references the Secret containing credentials.
+                    description: |-
+                      SecretRef references the Secret containing credentials.
+                      Required for api-key and oauth types. Not used with none.
                     properties:
                       name:
                         description: Name is the name of the secret.
@@ -313,15 +315,19 @@ spec:
                     - name
                     type: object
                   type:
-                    description: Type specifies the credential type (api-key or oauth).
+                    description: Type specifies the credential type.
                     enum:
                     - api-key
                     - oauth
+                    - none
                     type: string
                 required:
-                - secretRef
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: secretRef is required for api-key and oauth credential
+                    types
+                  rule: self.type == 'none' || has(self.secretRef)
               dependsOn:
                 description: DependsOn lists Task names that must succeed before this
                   Task starts.
@@ -575,6 +581,12 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  serviceAccountName:
+                    description: |-
+                      ServiceAccountName sets the pod's service account.
+                      Use with workload identity systems such as IRSA on EKS, GKE
+                      Workload Identity, or Azure Workload Identity.
+                    type: string
                 type: object
               prompt:
                 description: Prompt is the task prompt to send to the agent.
@@ -791,7 +803,9 @@ spec:
                       agent.
                     properties:
                       secretRef:
-                        description: SecretRef references the Secret containing credentials.
+                        description: |-
+                          SecretRef references the Secret containing credentials.
+                          Required for api-key and oauth types. Not used with none.
                         properties:
                           name:
                             description: Name is the name of the secret.
@@ -800,16 +814,19 @@ spec:
                         - name
                         type: object
                       type:
-                        description: Type specifies the credential type (api-key or
-                          oauth).
+                        description: Type specifies the credential type.
                         enum:
                         - api-key
                         - oauth
+                        - none
                         type: string
                     required:
-                    - secretRef
                     - type
                     type: object
+                    x-kubernetes-validations:
+                    - message: secretRef is required for api-key and oauth credential
+                        types
+                      rule: self.type == 'none' || has(self.secretRef)
                   dependsOn:
                     description: DependsOn lists Task names that spawned Tasks depend
                       on.
@@ -1064,6 +1081,12 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                      serviceAccountName:
+                        description: |-
+                          ServiceAccountName sets the pod's service account.
+                          Use with workload identity systems such as IRSA on EKS, GKE
+                          Workload Identity, or Azure Workload Identity.
+                        type: string
                     type: object
                   promptTemplate:
                     description: |-
