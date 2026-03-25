@@ -9,6 +9,8 @@
 - **Commit messages.** Do not include PR links in commit messages.
 - **Kubernetes resource comparison.** Use semantic `.Equal()` or `.Cmp()` methods for `resource.Quantity` comparisons, not `reflect.DeepEqual` — structurally different Quantity values can be semantically identical (e.g., `1000m` vs `1` CPU).
 - **Consistent guidance across surfaces.** When changing user-facing guidance or instructions, search for all surfaces that reference the same topic (docs, CLI output, templates, code comments) and update them together.
+- **Provider-agnostic API design.** When adding CRD fields or API types, prefer generic, provider-agnostic abstractions over provider-specific ones (e.g., a generic `none` credential type instead of `bedrock`). Provider-specific details should be handled through existing generic mechanisms like `PodOverrides.Env` rather than dedicated fields.
+- **Idiomatic Helm values.** Use nested dictionary structures in `values.yaml` (e.g., `controller.resources.requests.cpu`) instead of flat string-based parameters. Values that represent structured data should be proper YAML dictionaries, not strings.
 
 ## Key Makefile Targets
 - `make verify` — run all verification checks (lint, fmt, vet, etc.).
