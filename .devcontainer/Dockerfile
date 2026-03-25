@@ -69,7 +69,7 @@ cat >> /etc/zshrc << 'SHELL_RC'
 
 # Claude / Bedrock helper function
 claude-bedrock() {
-        CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
+    CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
 }
 
 # Teleport credential helpers
@@ -91,4 +91,10 @@ alias gimme-sandbox-creds="tsh svid issue --output /opt/roles-anywhere-sandbox -
 SHELL_RC
 EOF
 
-USER vscode
+# Needed for teleport & credentials
+RUN <<EOF
+    echo 'export TELEPORT_AUTH=google' >>/etc/zshrc
+    echo 'export TELEPORT_PROXY=anomalo.teleport.sh:443' >>/etc/zshrc
+    echo 'export TELEPORT_AUTH=google' >>/etc/bash.bashrc
+    echo 'export TELEPORT_PROXY=anomalo.teleport.sh:443' >>/etc/bash.bashrc
+EOF
