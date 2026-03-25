@@ -69,7 +69,7 @@ cat >> /etc/zshrc << 'SHELL_RC'
 
 # Claude / Bedrock helper function
 claude-bedrock() {
-        CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
+    CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
 }
 
 # Teleport credential helpers
@@ -89,4 +89,12 @@ alias gimme-creds="tsh svid issue --output /opt/roles-anywhere --svid-ttl 12h /s
 alias gimme-admin-creds="tsh svid issue --output /opt/roles-anywhere-admin --svid-ttl 12h /role/administrator"
 alias gimme-sandbox-creds="tsh svid issue --output /opt/roles-anywhere-sandbox --svid-ttl 12h /cloud/aws-sandbox"
 SHELL_RC
+EOF
+
+# Needed for teleport & credentials
+RUN <<EOF
+    echo 'export TELEPORT_AUTH=google' >>/etc/zshrc
+    echo 'export TELEPORT_PROXY=anomalo.teleport.sh:443' >>/etc/zshrc
+    echo 'export TELEPORT_AUTH=google' >>/etc/bash.bashrc
+    echo 'export TELEPORT_PROXY=anomalo.teleport.sh:443' >>/etc/bash.bashrc
 EOF
