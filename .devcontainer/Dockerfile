@@ -63,6 +63,9 @@ output = json
 EOF
 EOB
 
+# Set AWS_CONFIG_FILE so AWS SDK can find the config
+ENV AWS_CONFIG_FILE="/root/.aws/config"
+
 # claude-bedrock helper and gimme-creds aliases
 RUN <<'EOF'
 cat >> /etc/zshrc << 'SHELL_RC'
