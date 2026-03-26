@@ -63,15 +63,26 @@ output = json
 EOF
 EOB
 
-# Set AWS_CONFIG_FILE so AWS SDK can find the config
-ENV AWS_CONFIG_FILE="/root/.aws/config"
-
 # claude-bedrock helper and gimme-creds aliases
 RUN <<'EOF'
 cat >> /etc/zshrc << 'SHELL_RC'
 
 # Claude / Bedrock helper function
 claude-bedrock() {
+    # Fetch credentials using aws_signing_helper
+    local creds=$(/usr/local/bin/aws_signing_helper credential-process \
+        --certificate /opt/roles-anywhere/svid.pem \
+        --private-key /opt/roles-anywhere/svid_key.pem \
+        --profile-arn arn:aws:rolesanywhere:us-west-1:580663733917:profile/1c5babda-a4a9-4c75-9a16-88e143ab0233 \
+        --trust-anchor-arn arn:aws:rolesanywhere:us-west-1:580663733917:trust-anchor/b15762fd-2a5f-4bcd-a09f-17f63f4f2f98 \
+        --role-arn arn:aws:iam::580663733917:role/TeleportDeveloperAccess 2>/dev/null)
+
+    # Export credentials as environment variables
+    export AWS_ACCESS_KEY_ID=$(echo "$creds" | jq -r '.AccessKeyId')
+    export AWS_SECRET_ACCESS_KEY=$(echo "$creds" | jq -r '.SecretAccessKey')
+    export AWS_SESSION_TOKEN=$(echo "$creds" | jq -r '.SessionToken')
+
+    # Call claude with Bedrock enabled
     CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
 }
 
@@ -84,6 +95,20 @@ cat >> /etc/bash.bashrc << 'SHELL_RC'
 
 # Claude / Bedrock helper function
 claude-bedrock() {
+    # Fetch credentials using aws_signing_helper
+    local creds=$(/usr/local/bin/aws_signing_helper credential-process \
+        --certificate /opt/roles-anywhere/svid.pem \
+        --private-key /opt/roles-anywhere/svid_key.pem \
+        --profile-arn arn:aws:rolesanywhere:us-west-1:580663733917:profile/1c5babda-a4a9-4c75-9a16-88e143ab0233 \
+        --trust-anchor-arn arn:aws:rolesanywhere:us-west-1:580663733917:trust-anchor/b15762fd-2a5f-4bcd-a09f-17f63f4f2f98 \
+        --role-arn arn:aws:iam::580663733917:role/TeleportDeveloperAccess 2>/dev/null)
+
+    # Export credentials as environment variables
+    export AWS_ACCESS_KEY_ID=$(echo "$creds" | jq -r '.AccessKeyId')
+    export AWS_SECRET_ACCESS_KEY=$(echo "$creds" | jq -r '.SecretAccessKey')
+    export AWS_SESSION_TOKEN=$(echo "$creds" | jq -r '.SessionToken')
+
+    # Call claude with Bedrock enabled
     CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-west-2 claude "$@"
 }
 
