@@ -3,6 +3,11 @@ WORKDIR /workspace
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o bin/kelos-token-refresher ./cmd/kelos-token-refresher
+
+# Copy source
+COPY . .
 RUN CGO_ENABLED=0 go build -o bin/kelos-token-refresher ./cmd/kelos-token-refresher
 
 FROM gcr.io/distroless/static:nonroot
