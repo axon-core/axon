@@ -29,6 +29,10 @@ type When struct {
 	// +optional
 	GitHubPullRequests *GitHubPullRequests `json:"githubPullRequests,omitempty"`
 
+	// GitHubWebhook discovers issues and pull requests from GitHub webhooks.
+	// +optional
+	GitHubWebhook *GitHubWebhook `json:"githubWebhook,omitempty"`
+
 	// Cron triggers task spawning on a cron schedule.
 	// +optional
 	Cron *Cron `json:"cron,omitempty"`
@@ -258,6 +262,29 @@ type GitHubPullRequests struct {
 	// When empty, spec.pollInterval is used.
 	// +optional
 	PollInterval string `json:"pollInterval,omitempty"`
+}
+
+// GitHubWebhook discovers issues and pull requests from GitHub webhook events.
+// Instead of polling the GitHub API, work items are discovered from webhook
+// payloads received by the kelos-webhook-receiver and stored as WebhookEvent
+// custom resources.
+type GitHubWebhook struct {
+	// Namespace is the Kubernetes namespace where WebhookEvent resources are created.
+	// The spawner will watch for GitHub webhook events in this namespace.
+	// +kubebuilder:validation:Required
+	Namespace string `json:"namespace"`
+
+	// Labels filters issues/PRs by labels (applied client-side to webhook payloads).
+	// +optional
+	Labels []string `json:"labels,omitempty"`
+
+	// ExcludeLabels filters out issues/PRs that have any of these labels (client-side).
+	// +optional
+	ExcludeLabels []string `json:"excludeLabels,omitempty"`
+
+	// Reporting configures status reporting back to GitHub.
+	// +optional
+	Reporting *GitHubReporting `json:"reporting,omitempty"`
 }
 
 // Jira discovers issues from a Jira project.
