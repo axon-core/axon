@@ -154,7 +154,7 @@ func (h *webhookHandler) handle(w http.ResponseWriter, r *http.Request) {
 
 	h.log.Info("Webhook received and stored", "source", source, "event", event.Name)
 
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Webhook received"))
 }
 
