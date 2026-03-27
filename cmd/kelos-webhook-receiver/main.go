@@ -161,15 +161,15 @@ func (h *webhookHandler) handle(w http.ResponseWriter, r *http.Request) {
 // validateGitHubSignature validates the X-Hub-Signature-256 header against the payload.
 // The secret is read from the GITHUB_WEBHOOK_SECRET environment variable.
 func validateGitHubSignature(headers http.Header, payload []byte) error {
-	signature := headers.Get("X-Hub-Signature-256")
-	if signature == "" {
-		return fmt.Errorf("missing X-Hub-Signature-256 header")
-	}
-
 	secret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if secret == "" {
 		// If no secret is configured, skip validation (development mode)
 		return nil
+	}
+
+	signature := headers.Get("X-Hub-Signature-256")
+	if signature == "" {
+		return fmt.Errorf("missing X-Hub-Signature-256 header")
 	}
 
 	// Compute expected signature
