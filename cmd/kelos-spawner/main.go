@@ -119,7 +119,7 @@ func main() {
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 scheme,
 		HealthProbeBindAddress: "0",
-		Metrics:                metricsserver.Options{BindAddress: "0"},
+		Metrics:                metricsserver.Options{BindAddress: ":8080"},
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
 				namespace: {},
@@ -169,6 +169,16 @@ func runReportingCycle(ctx context.Context, cl client.Client, key types.Namespac
 }
 
 func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL string, httpClient *http.Client) error {
+	start := time.Now()
+	err := runCycleCore(ctx, cl, key, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL, httpClient)
+	discoveryDurationSeconds.Observe(time.Since(start).Seconds())
+	if err != nil {
+		discoveryErrorsTotal.Inc()
+	}
+	return err
+}
+
+func runCycleCore(ctx context.Context, cl client.Client, key types.NamespacedName, githubOwner, githubRepo, githubAPIBaseURL, githubTokenFile, jiraBaseURL, jiraProject, jiraJQL string, httpClient *http.Client) error {
 	var ts kelosv1alpha1.TaskSpawner
 	if err := cl.Get(ctx, key, &ts); err != nil {
 		return fmt.Errorf("fetching TaskSpawner: %w", err)
@@ -179,10 +189,20 @@ func runCycle(ctx context.Context, cl client.Client, key types.NamespacedName, g
 		return fmt.Errorf("building source: %w", err)
 	}
 
-	return runCycleWithSource(ctx, cl, key, src)
+	return runCycleWithSourceCore(ctx, cl, key, src)
 }
 
 func runCycleWithSource(ctx context.Context, cl client.Client, key types.NamespacedName, src source.Source) error {
+	start := time.Now()
+	err := runCycleWithSourceCore(ctx, cl, key, src)
+	discoveryDurationSeconds.Observe(time.Since(start).Seconds())
+	if err != nil {
+		discoveryErrorsTotal.Inc()
+	}
+	return err
+}
+
+func runCycleWithSourceCore(ctx context.Context, cl client.Client, key types.NamespacedName, src source.Source) error {
 	log := ctrl.Log.WithName("spawner")
 
 	var ts kelosv1alpha1.TaskSpawner
@@ -226,6 +246,7 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		return fmt.Errorf("discovering items: %w", err)
 	}
 
+	itemsDiscoveredTotal.Add(float64(len(items)))
 	log.Info("discovered items", "count", len(items))
 
 	// Build set of already-created Tasks by listing them from the API.
@@ -388,6 +409,8 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 		activeTasks++
 	}
 
+	tasksCreatedTotal.Add(float64(newTasksCreated))
+
 	// Update status in a single batch
 	if err := cl.Get(ctx, key, &ts); err != nil {
 		return fmt.Errorf("re-fetching TaskSpawner for status update: %w", err)
@@ -432,6 +455,9 @@ func runCycleWithSource(ctx context.Context, cl client.Client, key types.Namespa
 	if err := cl.Status().Update(ctx, &ts); err != nil {
 		return fmt.Errorf("updating TaskSpawner status: %w", err)
 	}
+
+	// Count the cycle as successful only after the status write commits.
+	discoveryTotal.Inc()
 
 	return nil
 }

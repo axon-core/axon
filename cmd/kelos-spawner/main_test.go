@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,6 +20,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -61,6 +66,27 @@ func setupTest(t *testing.T, ts *kelosv1alpha1.TaskSpawner, existingTasks ...kel
 
 	key := types.NamespacedName{Name: ts.Name, Namespace: ts.Namespace}
 	return cl, key
+}
+
+func histogramSampleCount(t *testing.T, collector prometheus.Collector) uint64 {
+	t.Helper()
+
+	ch := make(chan prometheus.Metric, 10)
+	collector.Collect(ch)
+	close(ch)
+
+	for metric := range ch {
+		var dtoMetric dto.Metric
+		if err := metric.Write(&dtoMetric); err != nil {
+			t.Fatalf("Writing metric: %v", err)
+		}
+		if dtoMetric.Histogram != nil {
+			return dtoMetric.GetHistogram().GetSampleCount()
+		}
+	}
+
+	t.Fatal("Expected histogram metric to be collected")
+	return 0
 }
 
 func newTaskSpawner(name, namespace string, maxConcurrency *int32) *kelosv1alpha1.TaskSpawner {
@@ -447,6 +473,81 @@ func TestRunCycleWithSource_ActiveTasksStatusUpdated(t *testing.T) {
 	// 1 existing running + 1 new = 2 active
 	if updatedTS.Status.ActiveTasks != 2 {
 		t.Errorf("Expected activeTasks=2, got %d", updatedTS.Status.ActiveTasks)
+	}
+}
+
+func TestRunCycleWithSource_StatusUpdateFailureCountsDiscoveryError(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	src := &fakeSource{
+		items: []source.WorkItem{
+			{ID: "1", Title: "Item 1"},
+		},
+	}
+
+	updateErr := errors.New("status update failed")
+	cl := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		WithObjects(ts).
+		WithStatusSubresource(ts).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(_ context.Context, _ client.Client, subResourceName string, obj client.Object, _ ...client.SubResourceUpdateOption) error {
+				if subResourceName == "status" {
+					if _, ok := obj.(*kelosv1alpha1.TaskSpawner); ok {
+						return updateErr
+					}
+				}
+				return nil
+			},
+		}).
+		Build()
+	key := types.NamespacedName{Name: ts.Name, Namespace: ts.Namespace}
+
+	beforeDiscovery := testutil.ToFloat64(discoveryTotal)
+	beforeErrors := testutil.ToFloat64(discoveryErrorsTotal)
+	beforeTasksCreated := testutil.ToFloat64(tasksCreatedTotal)
+
+	err := runCycleWithSource(context.Background(), cl, key, src)
+	if !errors.Is(err, updateErr) {
+		t.Fatalf("Expected status update error %q, got %v", updateErr, err)
+	}
+
+	if delta := testutil.ToFloat64(discoveryTotal) - beforeDiscovery; delta != 0 {
+		t.Errorf("Expected discoveryTotal delta 0 on failed cycle, got %f", delta)
+	}
+	if delta := testutil.ToFloat64(discoveryErrorsTotal) - beforeErrors; delta != 1 {
+		t.Errorf("Expected discoveryErrorsTotal delta 1 on failed cycle, got %f", delta)
+	}
+	if delta := testutil.ToFloat64(tasksCreatedTotal) - beforeTasksCreated; delta != 1 {
+		t.Errorf("Expected tasksCreatedTotal delta 1 after creating a Task, got %f", delta)
+	}
+}
+
+func TestRunCycle_BuildSourceFailureCountsDiscoveryErrorAndDuration(t *testing.T) {
+	ts := newTaskSpawner("spawner", "default", nil)
+	ts.Spec.When.GitHubIssues.TriggerComment = "/kelos pick-up"
+	ts.Spec.When.GitHubIssues.CommentPolicy = &kelosv1alpha1.GitHubCommentPolicy{
+		AllowedUsers: []string{"alice"},
+	}
+
+	cl, key := setupTest(t, ts)
+
+	beforeDiscovery := testutil.ToFloat64(discoveryTotal)
+	beforeErrors := testutil.ToFloat64(discoveryErrorsTotal)
+	beforeDurationCount := histogramSampleCount(t, discoveryDurationSeconds)
+
+	err := runCycle(context.Background(), cl, key, "owner", "repo", "", "", "", "", "", nil)
+	if err == nil {
+		t.Fatal("Expected buildSource error")
+	}
+
+	if delta := testutil.ToFloat64(discoveryTotal) - beforeDiscovery; delta != 0 {
+		t.Errorf("Expected discoveryTotal delta 0 on pre-discovery failure, got %f", delta)
+	}
+	if delta := testutil.ToFloat64(discoveryErrorsTotal) - beforeErrors; delta != 1 {
+		t.Errorf("Expected discoveryErrorsTotal delta 1 on pre-discovery failure, got %f", delta)
+	}
+	if delta := histogramSampleCount(t, discoveryDurationSeconds) - beforeDurationCount; delta != 1 {
+		t.Errorf("Expected discoveryDurationSeconds sample count delta 1 on pre-discovery failure, got %d", delta)
 	}
 }
 

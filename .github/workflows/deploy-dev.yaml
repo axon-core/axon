@@ -61,5 +61,46 @@ jobs:
           kubectl rollout restart deployment -l app.kubernetes.io/component=spawner -n "${KELOS_NAMESPACE}"
           kubectl rollout status deployment -l app.kubernetes.io/component=spawner -n "${KELOS_NAMESPACE}" --timeout=120s
 
+      - name: Apply PodMonitoring
+        run: |
+          kubectl apply -f - <<EOF
+          apiVersion: monitoring.googleapis.com/v1
+          kind: PodMonitoring
+          metadata:
+            name: kelos-controller
+            namespace: kelos-system
+            labels:
+              app.kubernetes.io/name: kelos
+              app.kubernetes.io/component: manager
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: kelos
+                app.kubernetes.io/component: manager
+            endpoints:
+              - port: metrics
+                interval: 30s
+          ---
+          apiVersion: monitoring.googleapis.com/v1
+          kind: PodMonitoring
+          metadata:
+            name: kelos-spawner
+            namespace: ${KELOS_NAMESPACE}
+            labels:
+              app.kubernetes.io/name: kelos
+              app.kubernetes.io/component: spawner
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: kelos
+                app.kubernetes.io/component: spawner
+              matchExpressions:
+                - key: job-name
+                  operator: DoesNotExist
+            endpoints:
+              - port: metrics
+                interval: 30s
+          EOF
+
       - name: Apply self-development resources
         run: kubectl apply -f self-development/ -n "${KELOS_NAMESPACE}"

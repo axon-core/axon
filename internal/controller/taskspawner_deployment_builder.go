@@ -267,6 +267,13 @@ func (b *DeploymentBuilder) Build(ts *kelosv1alpha1.TaskSpawner, workspace *kelo
 		Args:            p.args,
 		Env:             p.envVars,
 		VolumeMounts:    p.volumeMounts,
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "metrics",
+				ContainerPort: 8080,
+				Protocol:      corev1.ProtocolTCP,
+			},
+		},
 	}
 	if b.SpawnerResources != nil {
 		spawnerContainer.Resources = *b.SpawnerResources

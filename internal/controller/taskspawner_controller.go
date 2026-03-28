@@ -396,11 +396,13 @@ func (r *TaskSpawnerReconciler) updateDeployment(ctx context.Context, ts *kelosv
 			!equalStringSlices(current.Args, target.Args) ||
 			!equalEnvVars(current.Env, target.Env) ||
 			!reflect.DeepEqual(current.VolumeMounts, target.VolumeMounts) ||
+			!reflect.DeepEqual(current.Ports, target.Ports) ||
 			!resourceRequirementsEqual(current.Resources, target.Resources) {
 			deploy.Spec.Template.Spec.Containers[0].Image = target.Image
 			deploy.Spec.Template.Spec.Containers[0].Args = target.Args
 			deploy.Spec.Template.Spec.Containers[0].Env = target.Env
 			deploy.Spec.Template.Spec.Containers[0].VolumeMounts = target.VolumeMounts
+			deploy.Spec.Template.Spec.Containers[0].Ports = target.Ports
 			deploy.Spec.Template.Spec.Containers[0].Resources = target.Resources
 			needsUpdate = true
 		}

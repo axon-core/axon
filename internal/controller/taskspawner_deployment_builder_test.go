@@ -2782,3 +2782,89 @@ func TestUpdateCronJob_TokenRefresherResourcesDrift(t *testing.T) {
 		t.Errorf("expected token-refresher memory limit 256Mi after drift update, got %s", refresher.Resources.Limits.Memory().String())
 	}
 }
+
+func TestUpdateDeployment_PortsDrift(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+
+	// Build a deployment, then strip its ports to simulate a pre-existing deploy
+	deploy := builder.Build(ts, nil, false)
+	deploy.Spec.Template.Spec.Containers[0].Ports = nil
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(appsv1.AddToScheme(scheme))
+	utilruntime.Must(kelosv1alpha1.AddToScheme(scheme))
+
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(ts, deploy).
+		WithStatusSubresource(ts).
+		Build()
+
+	r := &TaskSpawnerReconciler{
+		Client:            cl,
+		Scheme:            scheme,
+		DeploymentBuilder: builder,
+	}
+
+	ctx := context.Background()
+	if err := r.updateDeployment(ctx, ts, deploy, nil, false, 1); err != nil {
+		t.Fatalf("updateDeployment error: %v", err)
+	}
+
+	var updated appsv1.Deployment
+	if err := cl.Get(ctx, client.ObjectKeyFromObject(deploy), &updated); err != nil {
+		t.Fatalf("getting deployment: %v", err)
+	}
+
+	spawner := updated.Spec.Template.Spec.Containers[0]
+	if len(spawner.Ports) != 1 {
+		t.Fatalf("expected 1 port after drift update, got %d", len(spawner.Ports))
+	}
+	if spawner.Ports[0].Name != "metrics" || spawner.Ports[0].ContainerPort != 8080 {
+		t.Errorf("expected metrics port 8080, got %s:%d", spawner.Ports[0].Name, spawner.Ports[0].ContainerPort)
+	}
+}
+
+func TestDeploymentBuilder_MetricsPort(t *testing.T) {
+	builder := NewDeploymentBuilder()
+	ts := &kelosv1alpha1.TaskSpawner{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-spawner",
+			Namespace: "default",
+		},
+		Spec: kelosv1alpha1.TaskSpawnerSpec{
+			When: kelosv1alpha1.When{
+				GitHubIssues: &kelosv1alpha1.GitHubIssues{},
+			},
+		},
+	}
+
+	deploy := builder.Build(ts, nil, false)
+	spawner := deploy.Spec.Template.Spec.Containers[0]
+
+	if len(spawner.Ports) != 1 {
+		t.Fatalf("expected 1 port, got %d", len(spawner.Ports))
+	}
+	port := spawner.Ports[0]
+	if port.Name != "metrics" {
+		t.Errorf("expected port name 'metrics', got %q", port.Name)
+	}
+	if port.ContainerPort != 8080 {
+		t.Errorf("expected container port 8080, got %d", port.ContainerPort)
+	}
+	if port.Protocol != corev1.ProtocolTCP {
+		t.Errorf("expected protocol TCP, got %s", port.Protocol)
+	}
+}
