@@ -30,4 +30,9 @@ spec:
     - Logging conventions: start log messages with capital letters and do not end with punctuation
     - Commit messages: do not include PR links in commit messages
     - When making structural changes (adding new files, configs, or components), update related documentation (especially README files) to stay in sync
+    - When changing user-facing guidance or instructions, search for all surfaces that reference the same topic (docs, CLI output, templates, code comments) and update them together
     - Kubernetes resource comparison: use semantic `.Equal()` or `.Cmp()` methods for `resource.Quantity` comparisons, not `reflect.DeepEqual`
+    - Provider-agnostic API design: when adding CRD fields or API types, prefer generic abstractions over provider-specific ones (e.g., `none` credential type instead of `bedrock`); use existing generic mechanisms like `PodOverrides.Env` for provider-specific details
+    - Idiomatic Helm values: use nested dictionary structures in `values.yaml` (e.g., `controller.resources.requests.cpu`) instead of flat string-based parameters; structured data should be proper YAML dictionaries, not strings
+    - Deploy-dev workflow sync: when adding new controller flags, resource settings, or monitoring config, update `.github/workflows/deploy-dev.yaml` to pass the corresponding values
+    - Controller-driven migration: when introducing breaking changes to deployed resources (e.g., label selector changes), prefer automated migration in the controller over requiring manual user intervention; add a FIXME comment noting when the migration code can be removed
