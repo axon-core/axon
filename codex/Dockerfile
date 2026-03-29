@@ -33,7 +33,8 @@ RUN npm install -g @openai/codex@${CODEX_VERSION}
 COPY codex/kelos_entrypoint.sh /kelos_entrypoint.sh
 RUN chmod +x /kelos_entrypoint.sh
 
-COPY bin/kelos-capture /kelos/kelos-capture
+ARG TARGETARCH
+COPY bin/kelos-capture-linux-${TARGETARCH} /kelos/kelos-capture
 
 RUN useradd -u 61100 -m -s /bin/bash agent
 RUN mkdir -p /home/agent/.codex && chown -R agent:agent /home/agent
