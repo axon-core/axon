@@ -33,7 +33,8 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 COPY claude-code/kelos_entrypoint.sh /kelos_entrypoint.sh
 RUN chmod +x /kelos_entrypoint.sh
 
-COPY bin/kelos-capture /kelos/kelos-capture
+ARG TARGETARCH
+COPY bin/kelos-capture-linux-${TARGETARCH} /kelos/kelos-capture
 
 RUN useradd -u 61100 -m -s /bin/bash claude
 RUN mkdir -p /home/claude/.claude && chown -R claude:claude /home/claude

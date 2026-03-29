@@ -2,6 +2,7 @@
 REGISTRY ?= ghcr.io/kelos-dev
 VERSION ?= latest
 IMAGE_DIRS ?= cmd/kelos-controller cmd/kelos-spawner cmd/kelos-token-refresher claude-code codex gemini opencode cursor
+LOCAL_ARCH ?= $(shell go env GOARCH)
 
 # Version injection for the kelos CLI – only set ldflags when an explicit
 # version is given so that dev builds fall through to runtime/debug info.
@@ -80,19 +81,44 @@ run: ## Run a controller from your host.
 	go run ./cmd/kelos-controller
 
 .PHONY: image
-image: ## Build docker images (use WHAT to build specific image).
+image: ## Build docker images for the local platform (use WHAT to build specific image).
 	@for dir in $(filter cmd/%,$(or $(WHAT),$(IMAGE_DIRS))); do \
-		GOOS=linux GOARCH=amd64 $(MAKE) build WHAT=$$dir; \
+		name=$$(basename $$dir); \
+		GOOS=linux GOARCH=$(LOCAL_ARCH) $(MAKE) build WHAT=$$dir; \
+		cp bin/$$name bin/$${name}-linux-$(LOCAL_ARCH); \
 	done
-	@GOOS=linux GOARCH=amd64 $(MAKE) build WHAT=cmd/kelos-capture
+	@GOOS=linux GOARCH=$(LOCAL_ARCH) $(MAKE) build WHAT=cmd/kelos-capture
+	@cp bin/kelos-capture bin/kelos-capture-linux-$(LOCAL_ARCH)
 	@for dir in $(or $(WHAT),$(IMAGE_DIRS)); do \
-		docker build -t $(REGISTRY)/$$(basename $$dir):$(VERSION) -f $$dir/Dockerfile .; \
+		docker build -t $(REGISTRY)/$$(basename $$dir):$(VERSION) -f $$dir/Dockerfile . --build-arg TARGETARCH=$(LOCAL_ARCH); \
 	done
 
 .PHONY: push
 push: ## Push docker images (use WHAT to push specific image).
 	@for dir in $(or $(WHAT),$(IMAGE_DIRS)); do \
 		docker push $(REGISTRY)/$$(basename $$dir):$(VERSION); \
+	done
+
+IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
+IMAGE_ARCHES = $(shell echo "$(IMAGE_PLATFORMS)" | tr ',' '\n' | cut -d'/' -f2 | tr '\n' ' ')
+
+.PHONY: image-multiarch
+image-multiarch: ## Build and push multi-platform docker images via buildx (use WHAT to build specific image).
+	@for dir in $(filter cmd/%,$(or $(WHAT),$(IMAGE_DIRS))); do \
+		name=$$(basename $$dir); \
+		for arch in $(IMAGE_ARCHES); do \
+			GOOS=linux GOARCH=$$arch $(MAKE) build WHAT=$$dir; \
+			mv bin/$$name bin/$${name}-linux-$$arch; \
+		done; \
+	done
+	@for arch in $(IMAGE_ARCHES); do \
+		GOOS=linux GOARCH=$$arch $(MAKE) build WHAT=cmd/kelos-capture; \
+		mv bin/kelos-capture bin/kelos-capture-linux-$$arch; \
+	done
+	@for dir in $(or $(WHAT),$(IMAGE_DIRS)); do \
+		docker buildx build --platform $(IMAGE_PLATFORMS) \
+			-t $(REGISTRY)/$$(basename $$dir):$(VERSION) \
+			-f $$dir/Dockerfile . --push; \
 	done
 
 RELEASE_PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
